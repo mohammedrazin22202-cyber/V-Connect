@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-VCONNECT Village Ranking System — Data Ingestion Script
+VCONNECT Village Ranking System — Data Ingestion Script (Optimized Columnar)
 
 Reads 9 VCONNECT engine CSV files, computes composite domain scores,
-and loads everything into a SQLite database for the Node.js API.
+precomputes dashboard stats, and loads everything into a highly compact,
+indexed SQLite database using flat columns for all raw metrics.
 """
 
 import os
@@ -12,6 +13,7 @@ import sqlite3
 import pandas as pd
 import numpy as np
 import time
+import json
 
 # ── Paths ──────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -31,9 +33,6 @@ CSV_FILES = {
 }
 
 # ── Domain score definitions ───────────────────────────────────────────
-# Each domain maps to columns that are "positive" (higher = better)
-# or "negative" (higher = worse, will be inverted).
-
 DOMAIN_POSITIVE = {
     "economy": [
         "employment_rate", "avg_household_income", "self_employment_rate",
@@ -126,6 +125,29 @@ DOMAIN_NEGATIVE = {
     ],
 }
 
+METRIC_MAP = {
+    "Economy": ["employment_rate", "avg_household_income", "poverty_rate",
+                 "crop_yield_index%", "farmer_income_avg", "farmer_debt_index",
+                 "market_access_score", "bank_access_score"],
+    "Education": ["literacy_rate", "female_literacy_rate", "dropout_rate",
+                   "school_count", "teacher_student_ratio", "digital_literacy_rate"],
+    "Health": ["infant_mortality_rate", "malnutrition_rate", "vaccination_coverage%",
+               "medical_staff_per_1000", "avg_healthcare_access_time_min",
+               "healthcare_effectiveness_score"],
+    "Infrastructure": ["drinking_water_coverage_pct", "sanitation_coverage_pct",
+                       "road_quality_index", "electricity_hours_per_day",
+                       "internet_penetration%", "nearest_hospital_distance_km"],
+    "Environment": ["flood_risk_score", "earthquake_risk_score", "air_quality_index",
+                     "forest_cover_pct", "disaster_preparedness_score",
+                     "climate_vulnerability_index"],
+    "Governance": ["panchayat_efficiency_score", "transparency_index",
+                   "fund_utilization_pct", "scheme_coverage_pct",
+                   "corruption_risk_proxy"],
+    "Social": ["total_crime_rate", "crimes_against_women_rate",
+               "social_cohesion_index", "community_participation_score",
+               "youth_engagement_score"],
+}
+
 
 def safe_normalize(series, invert=False):
     """Min-max normalize to 0-100. If invert, flip so lower raw = higher score."""
@@ -155,7 +177,7 @@ def compute_domain_score(df, domain):
 def main():
     t0 = time.time()
     print("=" * 60)
-    print("VCONNECT Village Ranking System -- Data Ingestion")
+    print("VCONNECT Village Ranking System -- Optimized Columnar Ingestion")
     print("=" * 60)
 
     # ── 1. Load CSVs ─────────────────────────────────────────────────
@@ -168,17 +190,15 @@ def main():
             sys.exit(1)
         print(f"  Loading {fname}...", end=" ", flush=True)
         df = pd.read_csv(path, low_memory=False)
-        # Drop fully-empty rows
         df = df.dropna(how="all")
-        # Ensure village_id is int
         df["village_id"] = pd.to_numeric(df["village_id"], errors="coerce")
         df = df.dropna(subset=["village_id"])
         df["village_id"] = df["village_id"].astype(int)
         dfs[key] = df
-        print(f"({len(df)} rows)")
+        print(f"({len(df)} rows)", flush=True)
 
     # ── 2. Merge into a master frame on village_id ────────────────────
-    print("\n[2/4] Merging datasets on village_id...")
+    print("\n[2/4] Merging datasets on village_id...", flush=True)
     master = dfs["geography"][["village_id", "village_name", "district", "state",
                                 "gram_panchayat", "block", "region_zone",
                                 "latitude", "longitude", "area_sq_km",
@@ -202,56 +222,64 @@ def main():
         df = dfs[key].drop(columns=["village_name", "district", "state"], errors="ignore")
         master = master.merge(df, on="village_id", how="left")
 
-    print(f"  Master dataset: {len(master)} villages, {len(master.columns)} columns")
+    # Fill NaNs for all raw metrics
+    for cat, cols in METRIC_MAP.items():
+        for col in cols:
+            if col in master.columns:
+                master[col] = pd.to_numeric(master[col], errors="coerce").fillna(0.0)
+
+    print(f"  Master dataset: {len(master)} villages, {len(master.columns)} columns", flush=True)
 
     # ── 3. Compute domain scores ─────────────────────────────────────
-    print("\n[3/4] Computing domain scores...")
-    # Defragment to avoid PerformanceWarning
+    print("\n[3/4] Computing domain scores...", flush=True)
     master = master.copy()
     domains = ["economy", "education", "health", "infrastructure",
                "environment", "governance", "social"]
     for d in domains:
         col = f"{d}_score"
         master[col] = compute_domain_score(master, d)
-        print(f"  {d:20s} -> mean={master[col].mean():.1f}")
+        print(f"  {d:20s} -> mean={master[col].mean():.1f}", flush=True)
 
     master["overall_score"] = master[[f"{d}_score" for d in domains]].mean(axis=1).round(2)
-    print(f"  {'overall':20s} -> mean={master['overall_score'].mean():.1f}")
+    print(f"  {'overall':20s} -> mean={master['overall_score'].mean():.1f}", flush=True)
 
     # Compute rank (1 = best)
     master["overall_rank"] = master["overall_score"].rank(ascending=False, method="min").astype(int)
 
     # ── 4. Write to SQLite ────────────────────────────────────────────
-    print(f"\n[4/4] Writing to SQLite: {DB_PATH}")
+    print(f"\n[4/4] Writing to SQLite: {DB_PATH}", flush=True)
     if os.path.exists(DB_PATH):
         os.remove(DB_PATH)
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    # Villages table
-    cur.execute("""
-    CREATE TABLE villages (
-        village_id        INTEGER PRIMARY KEY,
-        village_name      TEXT,
-        district          TEXT,
-        state             TEXT,
-        gram_panchayat    TEXT,
-        block             TEXT,
-        region_zone       TEXT,
-        latitude          REAL,
-        longitude         REAL,
-        area_sq_km        REAL,
-        total_population  INTEGER,
-        households        INTEGER,
-        population_density REAL,
-        priority_level    TEXT,
-        emergency_flag    INTEGER,
-        intervention_category TEXT,
-        village_urgency_score REAL,
-        national_priority_rank INTEGER,
-        recommended_budget_inr REAL
-    )""")
+    # Build list of village columns dynamically (retains all raw metrics as floats)
+    village_cols = ["village_id", "village_name", "district", "state",
+                    "gram_panchayat", "block", "region_zone",
+                    "latitude", "longitude", "area_sq_km",
+                    "total_population", "households", "population_density",
+                    "priority_level", "emergency_flag",
+                    "intervention_category", "village_urgency_score",
+                    "national_priority_rank", "recommended_budget_inr"]
+    for cat, cols in METRIC_MAP.items():
+        for col in cols:
+            if col in master.columns and col not in village_cols:
+                village_cols.append(col)
+
+    # Build CREATE TABLE SQL dynamically
+    create_cols = []
+    for col in village_cols:
+        if col == "village_id":
+            create_cols.append("village_id INTEGER PRIMARY KEY")
+        elif col in ["total_population", "households", "emergency_flag", "national_priority_rank"]:
+            create_cols.append(f"[{col}] INTEGER")
+        elif col in ["village_name", "district", "state", "gram_panchayat", "block", "region_zone", "priority_level", "intervention_category"]:
+            create_cols.append(f"[{col}] TEXT")
+        else:
+            create_cols.append(f"[{col}] REAL")
+
+    cur.execute(f"CREATE TABLE villages ({', '.join(create_cols)})")
 
     # Domain scores table
     cur.execute("""
@@ -269,85 +297,122 @@ def main():
         FOREIGN KEY (village_id) REFERENCES villages(village_id)
     )""")
 
-    # Raw metrics table (key metrics for detail view)
+    # Dashboard stats table
     cur.execute("""
-    CREATE TABLE village_metrics (
-        village_id     INTEGER,
-        category       TEXT,
-        metric_name    TEXT,
-        metric_value   REAL,
-        FOREIGN KEY (village_id) REFERENCES villages(village_id)
+    CREATE TABLE dashboard_stats (
+        stat_key   TEXT PRIMARY KEY,
+        stat_value TEXT
     )""")
-
     conn.commit()
 
+    # Set high-speed ingestion pragmas
+    cur.execute("PRAGMA synchronous = OFF").fetchall()
+    cur.execute("PRAGMA journal_mode = MEMORY").fetchall()
+    cur.close()
+
     # Insert villages
-    village_cols = ["village_id", "village_name", "district", "state",
-                    "gram_panchayat", "block", "region_zone",
-                    "latitude", "longitude", "area_sq_km",
-                    "total_population", "households", "population_density",
-                    "priority_level", "emergency_flag",
-                    "intervention_category", "village_urgency_score",
-                    "national_priority_rank", "recommended_budget_inr"]
+    print("  Inserting villages...", end=" ", flush=True)
     vdf = master[village_cols].copy()
-    vdf.to_sql("villages", conn, if_exists="replace", index=False)
-    print(f"  villages: {len(vdf)} rows")
+    vdf.to_sql("villages", conn, if_exists="append", index=False)
+    print(f"({len(vdf)} rows)", flush=True)
 
     # Insert domain scores
+    print("  Inserting domain scores...", end=" ", flush=True)
     score_cols = ["village_id"] + [f"{d}_score" for d in domains] + ["overall_score", "overall_rank"]
     sdf = master[score_cols].copy()
-    sdf.to_sql("domain_scores", conn, if_exists="replace", index=False)
-    print(f"  domain_scores: {len(sdf)} rows")
+    sdf.to_sql("domain_scores", conn, if_exists="append", index=False)
+    print(f"({len(sdf)} rows)", flush=True)
 
-    # Insert key raw metrics (flatten selected columns per category)
-    METRIC_MAP = {
-        "Economy": ["employment_rate", "avg_household_income", "poverty_rate",
-                     "crop_yield_index%", "farmer_income_avg", "farmer_debt_index",
-                     "market_access_score", "bank_access_score"],
-        "Education": ["literacy_rate", "female_literacy_rate", "dropout_rate",
-                       "school_count", "teacher_student_ratio", "digital_literacy_rate"],
-        "Health": ["infant_mortality_rate", "malnutrition_rate", "vaccination_coverage%",
-                   "medical_staff_per_1000", "avg_healthcare_access_time_min",
-                   "healthcare_effectiveness_score"],
-        "Infrastructure": ["drinking_water_coverage_pct", "sanitation_coverage_pct",
-                           "road_quality_index", "electricity_hours_per_day",
-                           "internet_penetration%", "nearest_hospital_distance_km"],
-        "Environment": ["flood_risk_score", "earthquake_risk_score", "air_quality_index",
-                        "forest_cover_pct", "disaster_preparedness_score",
-                        "climate_vulnerability_index"],
-        "Governance": ["panchayat_efficiency_score", "transparency_index",
-                       "fund_utilization_pct", "scheme_coverage_pct",
-                       "corruption_risk_proxy"],
-        "Social": ["total_crime_rate", "crimes_against_women_rate",
-                   "social_cohesion_index", "community_participation_score",
-                   "youth_engagement_score"],
+    # Precompute dashboard stats
+    print("  Precomputing dashboard stats...", flush=True)
+    cur = conn.cursor()
+    total_villages = len(master)
+    total_states = master["state"].nunique()
+    total_districts = master["district"].nunique()
+    
+    priority_counts = master["priority_level"].value_counts().to_dict()
+    priority_breakdown = [{"priority_level": k, "count": v} for k, v in priority_counts.items()]
+    
+    avg_scores = {
+        "economy": round(master["economy_score"].mean(), 2),
+        "education": round(master["education_score"].mean(), 2),
+        "health": round(master["health_score"].mean(), 2),
+        "infrastructure": round(master["infrastructure_score"].mean(), 2),
+        "environment": round(master["environment_score"].mean(), 2),
+        "governance": round(master["governance_score"].mean(), 2),
+        "social": round(master["social_score"].mean(), 2),
+        "overall": round(master["overall_score"].mean(), 2),
     }
 
-    print("  Inserting raw metrics (this may take a minute)...")
-    metric_rows = []
-    for cat, cols in METRIC_MAP.items():
-        for col in cols:
-            if col in master.columns:
-                sub = master[["village_id"]].copy()
-                sub["category"] = cat
-                sub["metric_name"] = col
-                sub["metric_value"] = pd.to_numeric(master[col], errors="coerce")
-                metric_rows.append(sub)
-
-    if metric_rows:
-        metrics_df = pd.concat(metric_rows, ignore_index=True)
-        metrics_df = metrics_df.dropna(subset=["metric_value"])
-        metrics_df.to_sql("village_metrics", conn, if_exists="replace", index=False)
-        print(f"  village_metrics: {len(metrics_df)} rows")
+    # State performance comparison data
+    state_groups = master.groupby("state")
+    state_scores_list = []
+    for state_name, group in state_groups:
+        vids = group["village_id"].values
+        group_scores = sdf[sdf["village_id"].isin(vids)]
+        state_scores_list.append({
+            "state": state_name,
+            "village_count": len(group),
+            "economy_score": round(group_scores["economy_score"].mean(), 2),
+            "education_score": round(group_scores["education_score"].mean(), 2),
+            "health_score": round(group_scores["health_score"].mean(), 2),
+            "infrastructure_score": round(group_scores["infrastructure_score"].mean(), 2),
+            "environment_score": round(group_scores["environment_score"].mean(), 2),
+            "governance_score": round(group_scores["governance_score"].mean(), 2),
+            "social_score": round(group_scores["social_score"].mean(), 2),
+            "overall_score": round(group_scores["overall_score"].mean(), 2),
+        })
+    
+    state_scores_list = sorted(state_scores_list, key=lambda x: x["overall_score"], reverse=True)
+    
+    top_states = state_scores_list[:10]
+    bottom_states = state_scores_list[-10:]
+    
+    summary_stats = {
+        "totalVillages": total_villages,
+        "totalStates": total_states,
+        "totalDistricts": total_districts,
+        "priorityBreakdown": priority_breakdown,
+        "avgScores": avg_scores,
+        "topStates": top_states,
+        "bottomStates": bottom_states
+    }
+    
+    # Filters JSON
+    unique_states = sorted(master["state"].dropna().unique().tolist())
+    unique_priorities = sorted(master["priority_level"].dropna().unique().tolist())
+    
+    state_districts_map = {}
+    for state_name, group in state_groups:
+        state_districts_map[state_name] = sorted(group["district"].dropna().unique().tolist())
+        
+    filters_data = {
+        "states": unique_states,
+        "priorities": unique_priorities,
+        "state_districts": state_districts_map
+    }
+    
+    cur.execute("INSERT INTO dashboard_stats (stat_key, stat_value) VALUES (?, ?)", ("summary", json.dumps(summary_stats)))
+    cur.execute("INSERT INTO dashboard_stats (stat_key, stat_value) VALUES (?, ?)", ("state_comparison", json.dumps(state_scores_list)))
+    cur.execute("INSERT INTO dashboard_stats (stat_key, stat_value) VALUES (?, ?)", ("filters", json.dumps(filters_data)))
+    conn.commit()
 
     # Create indexes for fast queries
-    print("  Creating indexes...")
+    print("  Creating indexes...", flush=True)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_villages_state ON villages(state)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_villages_district ON villages(district)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_villages_priority ON villages(priority_level)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_villages_name ON villages(village_name)")
+    
     cur.execute("CREATE INDEX IF NOT EXISTS idx_scores_overall ON domain_scores(overall_score DESC)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_scores_rank ON domain_scores(overall_rank)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_metrics_vid ON village_metrics(village_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_scores_economy ON domain_scores(economy_score DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_scores_education ON domain_scores(education_score DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_scores_health ON domain_scores(health_score DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_scores_infrastructure ON domain_scores(infrastructure_score DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_scores_environment ON domain_scores(environment_score DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_scores_governance ON domain_scores(governance_score DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_scores_social ON domain_scores(social_score DESC)")
     conn.commit()
     conn.close()
 
@@ -356,7 +421,7 @@ def main():
     print(f"\n{'=' * 60}")
     print(f"[OK] Done in {elapsed:.1f}s -- DB size: {db_size_mb:.1f} MB")
     print(f"  {DB_PATH}")
-    print(f"{'=' * 60}")
+    print(f"{'=' * 60}", flush=True)
 
 
 if __name__ == "__main__":
