@@ -2,7 +2,7 @@
  * VCONNECT Village Ranking System — Express API Server
  *
  * Serves village ranking data from SQLite over a RESTful API.
- * Endpoints: /api/rankings, /api/villages/:id, /api/stats, /api/filters
+ * Endpoints: /api/rankings, /api/villages/:id, /api/stats, /api/filters, /api/compare/states
  */
 
 const express = require("express");
@@ -88,8 +88,10 @@ app.get("/api/rankings", (req, res) => {
     ];
     const sortCol = scoreCols.includes(sortBy) ? `d.${sortBy}` : `v.${sortBy}`;
 
-    // Count
-    const countSQL = `SELECT COUNT(*) as total FROM villages v JOIN domain_scores d ON v.village_id = d.village_id ${whereClause}`;
+    // Count (optimized to avoid JOIN unless whereClause references 'd.')
+    const countSQL = whereClause.includes("d.")
+      ? `SELECT COUNT(*) as total FROM villages v JOIN domain_scores d ON v.village_id = d.village_id ${whereClause}`
+      : `SELECT COUNT(*) as total FROM villages v ${whereClause}`;
     const { total } = db.prepare(countSQL).get(...params);
 
     // Data
@@ -126,7 +128,7 @@ app.get("/api/rankings", (req, res) => {
 });
 
 // ── GET /api/villages/:id ──────────────────────────────────────────────
-// Full village detail with all metrics
+// Full village detail with all metrics (grouped by category dynamically from flat columns)
 app.get("/api/villages/:id", (req, res) => {
   try {
     const id = safeInt(req.params.id, 0);
@@ -145,24 +147,42 @@ app.get("/api/villages/:id", (req, res) => {
       return res.status(404).json({ error: "Village not found" });
     }
 
-    // Get raw metrics
-    const metrics = db.prepare(`
-      SELECT category, metric_name, metric_value
-      FROM village_metrics
-      WHERE village_id = ?
-      ORDER BY category, metric_name
-    `).all(id);
+    const METRIC_MAP = {
+      "Economy": ["employment_rate", "avg_household_income", "poverty_rate",
+                   "crop_yield_index%", "farmer_income_avg", "farmer_debt_index",
+                   "market_access_score", "bank_access_score"],
+      "Education": ["literacy_rate", "female_literacy_rate", "dropout_rate",
+                     "school_count", "teacher_student_ratio", "digital_literacy_rate"],
+      "Health": ["infant_mortality_rate", "malnutrition_rate", "vaccination_coverage%",
+                 "medical_staff_per_1000", "avg_healthcare_access_time_min",
+                 "healthcare_effectiveness_score"],
+      "Infrastructure": ["drinking_water_coverage_pct", "sanitation_coverage_pct",
+                         "road_quality_index", "electricity_hours_per_day",
+                         "internet_penetration%", "nearest_hospital_distance_km"],
+      "Environment": ["flood_risk_score", "earthquake_risk_score", "air_quality_index",
+                       "forest_cover_pct", "disaster_preparedness_score",
+                       "climate_vulnerability_index"],
+      "Governance": ["panchayat_efficiency_score", "transparency_index",
+                     "fund_utilization_pct", "scheme_coverage_pct",
+                     "corruption_risk_proxy"],
+      "Social": ["total_crime_rate", "crimes_against_women_rate",
+                 "social_cohesion_index", "community_participation_score",
+                 "youth_engagement_score"],
+    };
 
-    // Group metrics by category
     const metricsByCategory = {};
-    for (const m of metrics) {
-      if (!metricsByCategory[m.category]) {
-        metricsByCategory[m.category] = [];
+    for (const [category, cols] of Object.entries(METRIC_MAP)) {
+      metricsByCategory[category] = [];
+      for (const col of cols) {
+        if (village[col] !== undefined && village[col] !== null) {
+          metricsByCategory[category].push({
+            name: col,
+            value: village[col]
+          });
+          // Remove raw metric from the main village object
+          delete village[col];
+        }
       }
-      metricsByCategory[m.category].push({
-        name: m.metric_name,
-        value: m.metric_value,
-      });
     }
 
     res.json({ village, metrics: metricsByCategory });
@@ -173,66 +193,14 @@ app.get("/api/villages/:id", (req, res) => {
 });
 
 // ── GET /api/stats ─────────────────────────────────────────────────────
-// Aggregate statistics for dashboard
+// Retrieve precomputed aggregate statistics for dashboard
 app.get("/api/stats", (req, res) => {
   try {
-    const totalVillages = db.prepare("SELECT COUNT(*) as count FROM villages").get().count;
-
-    const totalStates = db.prepare("SELECT COUNT(DISTINCT state) as count FROM villages").get().count;
-
-    const totalDistricts = db.prepare("SELECT COUNT(DISTINCT district) as count FROM villages").get().count;
-
-    const priorityBreakdown = db.prepare(`
-      SELECT priority_level, COUNT(*) as count
-      FROM villages
-      GROUP BY priority_level
-      ORDER BY count DESC
-    `).all();
-
-    const avgScores = db.prepare(`
-      SELECT
-        ROUND(AVG(economy_score), 2) as economy,
-        ROUND(AVG(education_score), 2) as education,
-        ROUND(AVG(health_score), 2) as health,
-        ROUND(AVG(infrastructure_score), 2) as infrastructure,
-        ROUND(AVG(environment_score), 2) as environment,
-        ROUND(AVG(governance_score), 2) as governance,
-        ROUND(AVG(social_score), 2) as social,
-        ROUND(AVG(overall_score), 2) as overall
-      FROM domain_scores
-    `).get();
-
-    // Top 10 states by avg overall score
-    const topStates = db.prepare(`
-      SELECT v.state, ROUND(AVG(d.overall_score), 2) as avg_score,
-             COUNT(*) as village_count
-      FROM villages v
-      JOIN domain_scores d ON v.village_id = d.village_id
-      GROUP BY v.state
-      ORDER BY avg_score DESC
-      LIMIT 10
-    `).all();
-
-    // Bottom 10 states
-    const bottomStates = db.prepare(`
-      SELECT v.state, ROUND(AVG(d.overall_score), 2) as avg_score,
-             COUNT(*) as village_count
-      FROM villages v
-      JOIN domain_scores d ON v.village_id = d.village_id
-      GROUP BY v.state
-      ORDER BY avg_score ASC
-      LIMIT 10
-    `).all();
-
-    res.json({
-      totalVillages,
-      totalStates,
-      totalDistricts,
-      priorityBreakdown,
-      avgScores,
-      topStates,
-      bottomStates,
-    });
+    const row = db.prepare("SELECT stat_value FROM dashboard_stats WHERE stat_key = 'summary'").get();
+    if (!row) {
+      return res.status(500).json({ error: "Summary stats not found. Database ingestion may be incomplete." });
+    }
+    res.json(JSON.parse(row.stat_value));
   } catch (err) {
     console.error("Stats error:", err.message);
     res.status(500).json({ error: err.message });
@@ -240,26 +208,26 @@ app.get("/api/stats", (req, res) => {
 });
 
 // ── GET /api/filters ───────────────────────────────────────────────────
-// Available filter options
+// Retrieve precomputed available filter options
 app.get("/api/filters", (req, res) => {
   try {
-    const states = db.prepare(
-      "SELECT DISTINCT state FROM villages WHERE state IS NOT NULL ORDER BY state"
-    ).all().map(r => r.state);
+    const row = db.prepare("SELECT stat_value FROM dashboard_stats WHERE stat_key = 'filters'").get();
+    if (!row) {
+      return res.status(500).json({ error: "Filter options not found. Database ingestion may be incomplete." });
+    }
+    const filters = JSON.parse(row.stat_value);
 
     // If state is provided, return districts for that state
     let districts = [];
     if (req.query.state) {
-      districts = db.prepare(
-        "SELECT DISTINCT district FROM villages WHERE state = ? AND district IS NOT NULL ORDER BY district"
-      ).all(req.query.state).map(r => r.district);
+      districts = filters.state_districts[req.query.state] || [];
     }
 
-    const priorities = db.prepare(
-      "SELECT DISTINCT priority_level FROM villages WHERE priority_level IS NOT NULL ORDER BY priority_level"
-    ).all().map(r => r.priority_level);
-
-    res.json({ states, districts, priorities });
+    res.json({
+      states: filters.states,
+      districts: districts,
+      priorities: filters.priorities
+    });
   } catch (err) {
     console.error("Filters error:", err.message);
     res.status(500).json({ error: err.message });
@@ -267,54 +235,22 @@ app.get("/api/filters", (req, res) => {
 });
 
 // ── GET /api/compare/states ────────────────────────────────────────────
-// Compare states by domain scores
+// Compare states by domain scores (leveraging precomputed stats table)
 app.get("/api/compare/states", (req, res) => {
   try {
     const stateList = req.query.states ? req.query.states.split(",") : [];
 
-    let query;
-    let params = [];
+    const row = db.prepare("SELECT stat_value FROM dashboard_stats WHERE stat_key = 'state_comparison'").get();
+    if (!row) {
+      return res.status(500).json({ error: "State comparisons not found. Database ingestion may be incomplete." });
+    }
+    
+    let data = JSON.parse(row.stat_value);
 
     if (stateList.length > 0) {
-      const placeholders = stateList.map(() => "?").join(",");
-      query = `
-        SELECT v.state,
-          ROUND(AVG(d.economy_score), 2) as economy_score,
-          ROUND(AVG(d.education_score), 2) as education_score,
-          ROUND(AVG(d.health_score), 2) as health_score,
-          ROUND(AVG(d.infrastructure_score), 2) as infrastructure_score,
-          ROUND(AVG(d.environment_score), 2) as environment_score,
-          ROUND(AVG(d.governance_score), 2) as governance_score,
-          ROUND(AVG(d.social_score), 2) as social_score,
-          ROUND(AVG(d.overall_score), 2) as overall_score,
-          COUNT(*) as village_count
-        FROM villages v
-        JOIN domain_scores d ON v.village_id = d.village_id
-        WHERE v.state IN (${placeholders})
-        GROUP BY v.state
-        ORDER BY overall_score DESC
-      `;
-      params = stateList;
-    } else {
-      query = `
-        SELECT v.state,
-          ROUND(AVG(d.economy_score), 2) as economy_score,
-          ROUND(AVG(d.education_score), 2) as education_score,
-          ROUND(AVG(d.health_score), 2) as health_score,
-          ROUND(AVG(d.infrastructure_score), 2) as infrastructure_score,
-          ROUND(AVG(d.environment_score), 2) as environment_score,
-          ROUND(AVG(d.governance_score), 2) as governance_score,
-          ROUND(AVG(d.social_score), 2) as social_score,
-          ROUND(AVG(d.overall_score), 2) as overall_score,
-          COUNT(*) as village_count
-        FROM villages v
-        JOIN domain_scores d ON v.village_id = d.village_id
-        GROUP BY v.state
-        ORDER BY overall_score DESC
-      `;
+      data = data.filter(d => stateList.includes(d.state));
     }
 
-    const data = db.prepare(query).all(...params);
     res.json({ data });
   } catch (err) {
     console.error("Compare states error:", err.message);
