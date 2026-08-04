@@ -9,6 +9,7 @@ const express = require("express");
 const cors = require("cors");
 const Database = require("better-sqlite3");
 const path = require("path");
+const metricMeta = require("./metric_meta.json");
 
 const app = express();
 const PORT = 3001;
@@ -22,7 +23,9 @@ app.use(express.json());
 let db;
 try {
   db = new Database(DB_PATH, { readonly: true });
-  db.pragma("cache_size = -64000"); // 64MB cache
+  db.pragma("cache_size = -128000"); // 128MB cache
+  db.pragma("temp_store = MEMORY");
+  db.pragma("mmap_size = 268435456"); // 256MB mmap
   console.log("✓ Connected to SQLite database");
 } catch (err) {
   console.error("✗ Failed to open database:", err.message);
@@ -43,6 +46,22 @@ app.get("/api/rankings", (req, res) => {
     const page = Math.max(1, safeInt(req.query.page, 1));
     const limit = Math.min(100, Math.max(1, safeInt(req.query.limit, 25)));
     const offset = (page - 1) * limit;
+
+    // Weighting parameters
+    const wEco = Math.max(0, parseFloat(req.query.w_eco ?? 1));
+    const wEdu = Math.max(0, parseFloat(req.query.w_edu ?? 1));
+    const wHea = Math.max(0, parseFloat(req.query.w_hea ?? 1));
+    const wInf = Math.max(0, parseFloat(req.query.w_inf ?? 1));
+    const wEnv = Math.max(0, parseFloat(req.query.w_env ?? 1));
+    const wGov = Math.max(0, parseFloat(req.query.w_gov ?? 1));
+    const wSoc = Math.max(0, parseFloat(req.query.w_soc ?? 1));
+    const totalWeight = wEco + wEdu + wHea + wInf + wEnv + wGov + wSoc;
+
+    const isCustomWeights = (wEco !== 1 || wEdu !== 1 || wHea !== 1 || wInf !== 1 || wEnv !== 1 || wGov !== 1 || wSoc !== 1) && totalWeight > 0;
+
+    const scoreFormula = isCustomWeights
+      ? `((d.economy_score * ${wEco}) + (d.education_score * ${wEdu}) + (d.health_score * ${wHea}) + (d.infrastructure_score * ${wInf}) + (d.environment_score * ${wEnv}) + (d.governance_score * ${wGov}) + (d.social_score * ${wSoc})) / ${totalWeight}`
+      : `d.overall_score`;
 
     // Sort
     const validSorts = [
@@ -81,12 +100,23 @@ app.get("/api/rankings", (req, res) => {
       : "";
 
     // Determine sort table alias
+    let sortCol;
+    let orderClause = order;
+    
     const scoreCols = [
       "overall_score", "economy_score", "education_score", "health_score",
       "infrastructure_score", "environment_score", "governance_score",
       "social_score", "overall_rank",
     ];
-    const sortCol = scoreCols.includes(sortBy) ? `d.${sortBy}` : `v.${sortBy}`;
+    
+    if (isCustomWeights && (sortBy === "overall_score" || sortBy === "overall_rank")) {
+      sortCol = scoreFormula;
+      if (sortBy === "overall_rank") {
+        orderClause = order === "desc" ? "ASC" : "DESC";
+      }
+    } else {
+      sortCol = scoreCols.includes(sortBy) ? `d.${sortBy}` : `v.${sortBy}`;
+    }
 
     // Count (optimized to avoid JOIN unless whereClause references 'd.')
     const countSQL = whereClause.includes("d.")
@@ -94,23 +124,45 @@ app.get("/api/rankings", (req, res) => {
       : `SELECT COUNT(*) as total FROM villages v ${whereClause}`;
     const { total } = db.prepare(countSQL).get(...params);
 
+    // Rank select expression
+    let rankSelectExpression = "d.overall_rank";
+    if (isCustomWeights) {
+      if (conditions.length > 0) {
+        rankSelectExpression = `RANK() OVER (ORDER BY ${scoreFormula} DESC) as overall_rank`;
+      } else {
+        rankSelectExpression = "0 as overall_rank";
+      }
+    }
+
     // Data
     const dataSQL = `
       SELECT
         v.village_id, v.village_name, v.district, v.state,
         v.total_population, v.priority_level, v.emergency_flag,
-        v.intervention_category, v.village_urgency_score,
+        v.intervention_category, v.village_urgency_score, v.latitude, v.longitude,
         d.economy_score, d.education_score, d.health_score,
         d.infrastructure_score, d.environment_score,
         d.governance_score, d.social_score,
-        d.overall_score, d.overall_rank
+        ${scoreFormula} as overall_score,
+        ${rankSelectExpression}
       FROM villages v
       JOIN domain_scores d ON v.village_id = d.village_id
       ${whereClause}
-      ORDER BY ${sortCol} ${order}
+      ORDER BY ${sortCol} ${orderClause}
       LIMIT ? OFFSET ?
     `;
     const rows = db.prepare(dataSQL).all(...params, limit, offset);
+
+    // Dynamic rank mapping for custom weights when unfiltered
+    if (isCustomWeights && conditions.length === 0) {
+      rows.forEach((row, i) => {
+        if (sortBy === "overall_rank" || sortBy === "overall_score") {
+          row.overall_rank = offset + i + 1;
+        } else {
+          row.overall_rank = null;
+        }
+      });
+    }
 
     res.json({
       data: rows,
@@ -185,9 +237,25 @@ app.get("/api/villages/:id", (req, res) => {
       }
     }
 
-    res.json({ village, metrics: metricsByCategory });
+    res.json({ village, metrics: metricsByCategory, metricMeta });
   } catch (err) {
     console.error("Village detail error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/simulate-rank ─────────────────────────────────────────────
+// Estimate national rank for a given overall score
+app.get("/api/simulate-rank", (req, res) => {
+  try {
+    const score = parseFloat(req.query.score);
+    if (isNaN(score)) {
+      return res.status(400).json({ error: "Invalid or missing score parameter" });
+    }
+    const result = db.prepare("SELECT COUNT(*) + 1 as rank FROM domain_scores WHERE overall_score > ?").get(score);
+    res.json({ rank: result.rank });
+  } catch (err) {
+    console.error("Simulate rank error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
