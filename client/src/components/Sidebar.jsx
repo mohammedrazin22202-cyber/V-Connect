@@ -4,6 +4,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 const navItems = [
   { path: '/', label: 'Rankings', icon: '📊' },
   { path: '/compare', label: 'State Comparison', icon: '🗺️' },
+  { path: '/compare-villages', label: 'Village Comparison', icon: '🏘️' },
 ];
 
 export default function Sidebar({ isOpen, onClose }) {

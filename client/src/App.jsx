@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import RankingDashboard from './pages/RankingDashboard';
 import VillageDetail from './pages/VillageDetail';
 import StateComparison from './pages/StateComparison';
+import VillageComparison from './pages/VillageComparison';
 import Sidebar from './components/Sidebar';
 import './index.css';
 
@@ -35,6 +36,7 @@ function App() {
             <Route path="/" element={<RankingDashboard />} />
             <Route path="/village/:id" element={<VillageDetail />} />
             <Route path="/compare" element={<StateComparison />} />
+            <Route path="/compare-villages" element={<VillageComparison />} />
           </Routes>
         </main>
       </div>

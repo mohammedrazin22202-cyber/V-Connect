@@ -10,12 +10,27 @@ export async function fetchRankings(params = {}) {
   if (params.district) query.set('district', params.district);
   if (params.priority) query.set('priority', params.priority);
   if (params.search) query.set('search', params.search);
+  
+  // Custom weights
+  if (params.w_eco) query.set('w_eco', params.w_eco);
+  if (params.w_edu) query.set('w_edu', params.w_edu);
+  if (params.w_hea) query.set('w_hea', params.w_hea);
+  if (params.w_inf) query.set('w_inf', params.w_inf);
+  if (params.w_env) query.set('w_env', params.w_env);
+  if (params.w_gov) query.set('w_gov', params.w_gov);
+  if (params.w_soc) query.set('w_soc', params.w_soc);
+
   const res = await fetch(`${API_BASE}/rankings?${query}`);
   return res.json();
 }
 
 export async function fetchVillage(id) {
   const res = await fetch(`${API_BASE}/villages/${id}`);
+  return res.json();
+}
+
+export async function fetchSimulatedRank(score) {
+  const res = await fetch(`${API_BASE}/simulate-rank?score=${score}`);
   return res.json();
 }
 
