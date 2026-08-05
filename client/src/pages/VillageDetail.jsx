@@ -65,6 +65,19 @@ const SLIDER_CONFIGS = [
   { col: 'internet_penetration%', label: 'Internet Penetration (%)', category: 'Infrastructure', minVal: 0, maxVal: 100, step: 1 },
 ];
 
+const OPTIMIZER_FACTORS = {
+  avg_household_income: { costFactor: 300, isPositive: true },
+  poverty_rate: { costFactor: 15000, isPositive: false },
+  dropout_rate: { costFactor: 10000, isPositive: false },
+  digital_literacy_rate: { costFactor: 8000, isPositive: true },
+  malnutrition_rate: { costFactor: 25000, isPositive: false },
+  avg_healthcare_access_time_min: { costFactor: 4000, isPositive: false },
+  drinking_water_coverage_pct: { costFactor: 12000, isPositive: true },
+  sanitation_coverage_pct: { costFactor: 10000, isPositive: true },
+  electricity_hours_per_day: { costFactor: 30000, isPositive: true },
+  "internet_penetration%": { costFactor: 5000, isPositive: true }
+};
+
 function formatMetricName(name) {
   return name
     .replace(/_/g, ' ')
@@ -87,6 +100,116 @@ export default function VillageDetail() {
   const [simulatedMetrics, setSimulatedMetrics] = useState({});
   const [simulatedRank, setSimulatedRank] = useState(null);
   const [simulatingRank, setSimulatingRank] = useState(false);
+  const [customBudget, setCustomBudget] = useState('');
+  const [activePreset, setActivePreset] = useState(null);
+
+  const applyPreset = (presetType) => {
+    const updated = {};
+    Object.values(metrics).forEach(items => {
+      items.forEach(item => {
+        updated[item.name] = item.value;
+      });
+    });
+
+    if (presetType === 'water_sanitation') {
+      updated['drinking_water_coverage_pct'] = 100;
+      updated['sanitation_coverage_pct'] = 100;
+    } else if (presetType === 'digital_edu') {
+      updated['digital_literacy_rate'] = 90;
+      updated['internet_penetration%'] = 90;
+      updated['electricity_hours_per_day'] = 24;
+    } else if (presetType === 'healthcare') {
+      updated['malnutrition_rate'] = Math.max(0, updated['malnutrition_rate'] - 15);
+      updated['avg_healthcare_access_time_min'] = Math.max(5, Math.min(updated['avg_healthcare_access_time_min'], 30));
+    } else if (presetType === 'economic') {
+      updated['avg_household_income'] = Math.min(50000, updated['avg_household_income'] * 1.5);
+      updated['poverty_rate'] = Math.max(0, updated['poverty_rate'] - 20);
+    }
+    
+    setSimulatedMetrics(updated);
+    setActivePreset(presetType);
+  };
+
+  const optimizeBudgetAllocation = (totalBudget) => {
+    if (!village || !totalBudget || totalBudget <= 0) return;
+
+    const initialSimulated = {};
+    Object.values(metrics).forEach(items => {
+      items.forEach(item => {
+        initialSimulated[item.name] = item.value;
+      });
+    });
+
+    let remainingBudget = totalBudget;
+
+    const steps = {
+      avg_household_income: 100,
+      poverty_rate: 0.5,
+      dropout_rate: 0.5,
+      digital_literacy_rate: 1,
+      malnutrition_rate: 0.5,
+      avg_healthcare_access_time_min: 1,
+      drinking_water_coverage_pct: 1,
+      sanitation_coverage_pct: 1,
+      electricity_hours_per_day: 0.5,
+      "internet_penetration%": 1
+    };
+
+    let loopCount = 0;
+    const maxLoops = 2000;
+    
+    while (remainingBudget > 0 && loopCount < maxLoops) {
+      let bestMetric = null;
+      let bestROI = -1;
+      let bestStepCost = 0;
+      let bestNextVal = 0;
+
+      SLIDER_CONFIGS.forEach(cfg => {
+        const col = cfg.col;
+        const currentVal = initialSimulated[col] !== undefined ? initialSimulated[col] : (metricMeta[col]?.min || 0);
+        const step = steps[col];
+        const config = OPTIMIZER_FACTORS[col];
+
+        if (!config) return;
+
+        let nextVal;
+        if (config.isPositive) {
+          nextVal = Math.min(cfg.maxVal, currentVal + step);
+        } else {
+          nextVal = Math.max(cfg.minVal, currentVal - step);
+        }
+
+        if (nextVal === currentVal) return;
+
+        const valChange = Math.abs(nextVal - currentVal);
+        const stepCost = valChange * config.costFactor;
+
+        if (stepCost > remainingBudget) return;
+
+        const currentNorm = getNormalizedValue(col, currentVal);
+        const nextNorm = getNormalizedValue(col, nextVal);
+        const normGain = nextNorm - currentNorm;
+
+        const roi = normGain / stepCost;
+
+        if (roi > bestROI && normGain > 0) {
+          bestROI = roi;
+          bestMetric = col;
+          bestStepCost = stepCost;
+          bestNextVal = nextVal;
+        }
+      });
+
+      if (!bestMetric) break;
+
+      initialSimulated[bestMetric] = bestNextVal;
+      remainingBudget -= bestStepCost;
+      loopCount++;
+    }
+
+    setSimulatedMetrics(initialSimulated);
+    setActivePreset(null);
+  };
 
   const localMapRef = useRef(null);
 
@@ -374,9 +497,14 @@ export default function VillageDetail() {
 
   return (
     <div className="dashboard animate-in">
-      <button className="btn btn--ghost back-btn" onClick={() => navigate('/')} id="back-btn" style={{ marginBottom: '18px' }}>
-        ← Back to Rankings
-      </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }} className="no-print">
+        <button className="btn btn--ghost back-btn" onClick={() => navigate('/')} id="back-btn" style={{ margin: 0 }}>
+          ← Back to Rankings
+        </button>
+        <button className="btn btn--primary" onClick={() => window.print()} id="print-pdf-btn" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          🖨️ Print PDF Report
+        </button>
+      </div>
 
       {/* Main glass info header */}
       <header className="village-header glass-panel">
@@ -494,6 +622,72 @@ export default function VillageDetail() {
         <h3 className="panel-title" style={{ fontSize: '18px', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '20px' }}>
           🛠️ AI Development Planner & Dynamic Simulator
         </h3>
+
+        {/* Campaign Presets and Smart Budget Optimizer panel */}
+        <div style={{ marginBottom: '24px', background: 'rgba(255,255,255,0.01)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }} className="no-print">
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            {/* Presets */}
+            <div style={{ flex: '2 1 400px' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Quick-Apply Intervention Presets</h4>
+              <div className="preset-grid">
+                <button 
+                  className={`preset-btn ${activePreset === 'water_sanitation' ? 'preset-btn--active' : ''}`}
+                  onClick={() => applyPreset('water_sanitation')}
+                >
+                  💧 Clean Water & Sanitation
+                </button>
+                <button 
+                  className={`preset-btn ${activePreset === 'digital_edu' ? 'preset-btn--active' : ''}`}
+                  onClick={() => applyPreset('digital_edu')}
+                >
+                  💻 Digital Village Push
+                </button>
+                <button 
+                  className={`preset-btn ${activePreset === 'healthcare' ? 'preset-btn--active' : ''}`}
+                  onClick={() => applyPreset('healthcare')}
+                >
+                  🏥 Primary Health Drive
+                </button>
+                <button 
+                  className={`preset-btn ${activePreset === 'economic' ? 'preset-btn--active' : ''}`}
+                  onClick={() => applyPreset('economic')}
+                >
+                  🌾 Economy & Poverty Relief
+                </button>
+              </div>
+            </div>
+
+            {/* Smart Optimizer */}
+            <div style={{ flex: '1 1 250px', borderLeft: '1px solid var(--border)', paddingLeft: '24px', minWidth: '240px' }} className="optimizer-section">
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Smart Budget Optimizer</h4>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input 
+                  type="text" 
+                  className="search-input" 
+                  style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}
+                  placeholder={`e.g. ₹${(village.recommended_budget_inr || 1500000).toLocaleString()}`}
+                  value={customBudget}
+                  onChange={e => setCustomBudget(e.target.value.replace(/\D/g, ''))}
+                  id="optimizer-budget-input"
+                />
+                <button 
+                  className="btn btn--primary"
+                  onClick={() => {
+                    const b = customBudget ? parseInt(customBudget) : (village.recommended_budget_inr || 1500000);
+                    optimizeBudgetAllocation(b);
+                  }}
+                  id="optimizer-run-btn"
+                  style={{ fontSize: '12px', whiteSpace: 'nowrap' }}
+                >
+                  Auto-Allocate
+                </button>
+              </div>
+              <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                Runs gradient allocation to maximize score gain based on index cost coefficients.
+              </p>
+            </div>
+          </div>
+        </div>
         
         <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
           {/* Slider controls (Left) */}
