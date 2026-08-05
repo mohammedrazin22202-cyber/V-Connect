@@ -107,6 +107,83 @@ export default function VillageComparison() {
     setCompareIds(prev => prev.filter(vid => vid !== id));
   };
 
+  const exportComparisonCSV = () => {
+    if (compareData.length === 0) return;
+    
+    const headers = ['Category', 'Metric', ...compareData.map(c => c.village.village_name)];
+    const rows = [];
+    
+    // Core Profile rows
+    const coreParams = [
+      { label: 'National Rank', key: 'overall_rank' },
+      { label: 'State', key: 'state' },
+      { label: 'District', key: 'district' },
+      { label: 'Gram Panchayat', key: 'gram_panchayat' },
+      { label: 'Block', key: 'block' },
+      { label: 'Population', key: 'total_population' },
+      { label: 'Households', key: 'households' },
+      { label: 'Area (sq km)', key: 'area_sq_km' },
+      { label: 'Density (/sq km)', key: 'population_density' },
+      { label: 'Priority Level', key: 'priority_level' },
+      { label: 'Recommended Budget (INR)', key: 'recommended_budget_inr' }
+    ];
+    
+    coreParams.forEach(p => {
+      rows.push([
+        'Profile',
+        p.label,
+        ...compareData.map(c => c.village[p.key] !== undefined ? c.village[p.key] : '—')
+      ]);
+    });
+    
+    // Domain Scores rows
+    const domainParams = [
+      { label: 'Overall Development Score', key: 'overall_score' },
+      { label: 'Economy & Agriculture', key: 'economy_score' },
+      { label: 'Education & Human Capital', key: 'education_score' },
+      { label: 'Health & Nutrition', key: 'health_score' },
+      { label: 'Infrastructure & Connectivity', key: 'infrastructure_score' },
+      { label: 'Environment & Disaster', key: 'environment_score' },
+      { label: 'Governance & Resource Flow', key: 'governance_score' },
+      { label: 'Social Stability & Safety', key: 'social_score' }
+    ];
+    
+    domainParams.forEach(p => {
+      rows.push([
+        'Domain Score',
+        p.label,
+        ...compareData.map(c => c.village[p.key] !== undefined ? c.village[p.key].toFixed(1) : '—')
+      ]);
+    });
+    
+    // Detailed Metrics rows
+    Object.entries(METRIC_MAP).forEach(([category, colList]) => {
+      colList.forEach(colName => {
+        const values = compareData.map(c => {
+          const mGroup = c.metrics[category] || [];
+          const metricItem = mGroup.find(m => m.name === colName);
+          return metricItem ? metricItem.value : '—';
+        });
+        rows.push([
+          category,
+          formatMetricName(colName),
+          ...values
+        ]);
+      });
+    });
+    
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(e => e.map(val => typeof val === 'string' && val.includes(',') ? `"${val}"` : val).join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const defaultName = compareData.map(c => c.village.village_name).join('_vs_');
+    link.setAttribute("download", `vconnect_comparison_${defaultName}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Prepare radar overlay data
   const radarData = useMemo(() => {
     if (compareData.length === 0) return [];
@@ -117,6 +194,66 @@ export default function VillageComparison() {
       });
       return entry;
     });
+  }, [compareData]);
+
+  const comparisonStats = useMemo(() => {
+    if (compareData.length < 2) return null;
+    
+    let bestScore = -1;
+    let bestName = '';
+    compareData.forEach(c => {
+      if (c.village.overall_score > bestScore) {
+        bestScore = c.village.overall_score;
+        bestName = c.village.village_name;
+      }
+    });
+    
+    const domains = [
+      { key: 'economy_score', label: 'Economy', rec: (lead, lag) => `Implement agricultural credit programs and market access pipelines in ${lag}. Reference ${lead}'s successful models.` },
+      { key: 'education_score', label: 'Education', rec: (lead, lag) => `Deploy digital classrooms and student retention campaigns in ${lag}.` },
+      { key: 'health_score', label: 'Health', rec: (lead, lag) => `Construct sub-health centers and improve vaccination coverage in ${lag} to mitigate child malnutrition.` },
+      { key: 'infrastructure_score', label: 'Infrastructure', rec: (lead, lag) => `Allocate priority funding for drinking water taps and sanitation coverage in ${lag}.` },
+      { key: 'environment_score', label: 'Environment', rec: (lead, lag) => `Integrate early disaster warning systems and clean energy initiatives in ${lag}.` },
+      { key: 'governance_score', label: 'Governance', rec: (lead, lag) => `Adopt digital governance tools and public scheme awareness programs in ${lag}. Consult ${lead}'s administrative workflow.` },
+      { key: 'social_score', label: 'Social', rec: (lead, lag) => `Launch youth engagement networks and safety policing initiatives in ${lag}.` }
+    ];
+    
+    const domainGaps = domains.map(d => {
+      let maxScore = -1;
+      let minScore = 999;
+      let leadVillage = '';
+      let lagVillage = '';
+      
+      compareData.forEach(c => {
+        const s = c.village[d.key] || 0;
+        if (s > maxScore) {
+          maxScore = s;
+          leadVillage = c.village.village_name;
+        }
+        if (s < minScore) {
+          minScore = s;
+          lagVillage = c.village.village_name;
+        }
+      });
+      
+      return {
+        label: d.label,
+        gap: maxScore - minScore,
+        lead: leadVillage,
+        lag: lagVillage,
+        recommendation: d.rec(leadVillage, lagVillage)
+      };
+    });
+    
+    const sortedGaps = [...domainGaps].sort((a, b) => b.gap - a.gap);
+    const greatestDisparity = sortedGaps[0];
+    
+    return {
+      bestName,
+      bestScore,
+      domainGaps,
+      greatestDisparity
+    };
   }, [compareData]);
 
   // Highlight helper: returns index of best value for a metric
@@ -147,11 +284,21 @@ export default function VillageComparison() {
 
   return (
     <div className="dashboard animate-in">
-      <header className="dashboard-header">
+      <header className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 className="page-title">Village Comparison</h2>
           <p className="page-subtitle">Compare up to 3 villages across all development indicators side-by-side</p>
         </div>
+        {compareData.length > 0 && (
+          <div style={{ display: 'flex', gap: '12px' }} className="no-print">
+            <button className="btn btn--ghost" onClick={exportComparisonCSV} style={{ display: 'flex', alignItems: 'center', gap: '6px' }} id="export-comparison-btn">
+              📥 Export CSV
+            </button>
+            <button className="btn btn--primary" onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }} id="print-comparison-btn">
+              🖨️ Print PDF
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Search and selection bar */}
@@ -439,6 +586,57 @@ export default function VillageComparison() {
               ))}
             </div>
           </div>
+
+          {/* Gap Analysis & Strategic Policy Recommendations */}
+          {comparisonStats && (
+            <div className="glass-panel" style={{ padding: '24px', marginTop: '24px' }}>
+              <h3 className="panel-title" style={{ fontSize: '18px', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '20px' }}>
+                🔍 Gap Analysis & Strategic Policy Recommendations
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+                <div style={{ background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.15)', padding: '16px', borderRadius: '8px' }}>
+                  <h4 style={{ color: 'var(--success)', margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold' }}>Top Performer</h4>
+                  <p style={{ fontSize: '18px', fontWeight: '800', margin: '4px 0' }}>{comparisonStats.bestName}</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Leads comparison with an overall score of <strong>{comparisonStats.bestScore.toFixed(1)}</strong>.</p>
+                </div>
+                
+                {comparisonStats.greatestDisparity && (
+                  <div style={{ background: 'rgba(239, 68, 68, 0.04)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '16px', borderRadius: '8px' }}>
+                    <h4 style={{ color: 'var(--danger)', margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold' }}>Greatest Disparity</h4>
+                    <p style={{ fontSize: '18px', fontWeight: '800', margin: '4px 0' }}>{comparisonStats.greatestDisparity.label}</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
+                      Disparity of <strong>{comparisonStats.greatestDisparity.gap.toFixed(1)}</strong> points. 
+                      Lead: <strong>{comparisonStats.greatestDisparity.lead}</strong>, Lag: <strong>{comparisonStats.greatestDisparity.lag}</strong>.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <h4 style={{ margin: '20px 0 10px 0', fontSize: '14px', color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>Domain Disparities & Peer Recommendations</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {comparisonStats.domainGaps.map(g => (
+                  <div key={g.label} style={{ background: 'rgba(255,255,255,0.02)', padding: '14px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ flex: '1 1 300px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                        <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{g.label}</strong>
+                        <span className={`gap-badge ${g.gap > 20 ? 'gap-badge--lag' : 'gap-badge--lead'}`}>
+                          Gap: {g.gap.toFixed(1)}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                        💡 {g.recommendation}
+                      </p>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'right', minWidth: '150px' }}>
+                      <div>👑 Lead: <strong>{g.lead}</strong></div>
+                      <div style={{ marginTop: '2px' }}>⚠️ Lag: <strong>{g.lag}</strong></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
       ) : (
