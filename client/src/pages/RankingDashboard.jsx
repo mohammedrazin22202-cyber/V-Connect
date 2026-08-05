@@ -45,6 +45,10 @@ export default function RankingDashboard() {
 
   // View state: table | map
   const [view, setView] = useState('table');
+  const [mapData, setMapData] = useState([]);
+  const [mapDensity, setMapDensity] = useState(25);
+  const [mapMode, setMapMode] = useState('markers'); // 'markers' | 'heatmap'
+  const [mapLoading, setMapLoading] = useState(false);
   const mapRef = useRef(null);
 
   const isCustomWeightsActive = useMemo(() => {
@@ -117,6 +121,35 @@ export default function RankingDashboard() {
     setPage(1);
   };
 
+  const exportToCSV = () => {
+    const headers = ['Rank', 'Village Name', 'District', 'State', 'Population', 'Priority', 'Overall Score', 'Economy', 'Education', 'Health', 'Infrastructure', 'Environment', 'Governance', 'Social'];
+    const rows = data.map(v => [
+      v.overall_rank,
+      `"${v.village_name.replace(/"/g, '""')}"`,
+      `"${v.district.replace(/"/g, '""')}"`,
+      `"${v.state.replace(/"/g, '""')}"`,
+      v.total_population,
+      v.priority_level,
+      v.overall_score ? v.overall_score.toFixed(1) : '—',
+      v.economy_score ? v.economy_score.toFixed(1) : '—',
+      v.education_score ? v.education_score.toFixed(1) : '—',
+      v.health_score ? v.health_score.toFixed(1) : '—',
+      v.infrastructure_score ? v.infrastructure_score.toFixed(1) : '—',
+      v.environment_score ? v.environment_score.toFixed(1) : '—',
+      v.governance_score ? v.governance_score.toFixed(1) : '—',
+      v.social_score ? v.social_score.toFixed(1) : '—'
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `vconnect_rankings_${state || 'national'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getPriorityClass = (level) => {
     if (!level) return '';
     const normalized = level.toLowerCase();
@@ -148,10 +181,42 @@ export default function RankingDashboard() {
     return pages;
   }, [page, pagination]);
 
-  // Leaflet Map Initialization and updates
+  // Separate Map Data Ingestion (enables larger datasets on Map View)
+  const loadMapData = useCallback(async () => {
+    if (view !== 'map') return;
+    setMapLoading(true);
+    try {
+      const result = await fetchRankings({
+        page: 1,
+        limit: mapDensity,
+        sort_by: sortBy,
+        order,
+        state,
+        district,
+        priority,
+        search,
+        w_eco: wEco,
+        w_edu: wEdu,
+        w_hea: wHea,
+        w_inf: wInf,
+        w_env: wEnv,
+        w_gov: wGov,
+        w_soc: wSoc,
+      });
+      setMapData(result.data || []);
+    } catch (err) {
+      console.error('Failed to load map data:', err);
+    }
+    setMapLoading(false);
+  }, [view, mapDensity, sortBy, order, state, district, priority, search, wEco, wEdu, wHea, wInf, wEnv, wGov, wSoc]);
+
+  useEffect(() => {
+    loadMapData();
+  }, [loadMapData]);
+
+  // Leaflet Map Initialization and updates (Marker Clustering & Heatmap)
   useEffect(() => {
     if (view === 'map' && window.L) {
-      // Small timeout to ensure container is fully rendered in DOM
       const timer = setTimeout(() => {
         const container = document.getElementById('dashboard-map');
         if (!container) return;
@@ -169,39 +234,72 @@ export default function RankingDashboard() {
           attribution: '&copy; OpenStreetMap contributors',
         }).addTo(map);
 
-        const validPoints = data.filter(v => v.latitude && v.longitude);
-        if (validPoints.length > 0) {
-          validPoints.forEach(v => {
-            const score = v.overall_score || 0;
-            const color = score >= 70 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
-            window.L.circleMarker([v.latitude, v.longitude], {
-              radius: 8,
-              fillColor: color,
-              color: '#ffffff',
-              weight: 1.5,
-              opacity: 1,
-              fillOpacity: 0.85,
-            })
-            .addTo(map)
-            .bindPopup(`
-              <div class="map-popup" style="color: #e2e8f0; font-family: sans-serif;">
-                <h4 style="margin: 0 0 6px 0; color: #ffffff; font-size: 14px; font-weight: 600;">${v.village_name}</h4>
-                <div style="color: #94a3b8; font-size: 11px; margin-bottom: 4px;">${v.district}, ${v.state}</div>
-                <div style="font-size: 12px; margin: 6px 0;">
-                  Score: <strong style="color: ${color}">${score.toFixed(1)}</strong> | Rank: <strong>#${v.overall_rank || '—'}</strong>
-                </div>
-                <div style="font-size: 11px; margin-bottom: 8px;">Population: ${v.total_population?.toLocaleString() || '—'}</div>
-                <button 
-                  onclick="window.location.hash = '#/village/${v.village_id}'; window.location.href = '/village/${v.village_id}';" 
-                  style="display: inline-block; font-size: 10px; color: #6366f1; border: 1px solid rgba(99,102,241,0.4); padding: 3px 8px; border-radius: 4px; background: rgba(99,102,241,0.1); cursor: pointer; font-weight: 500;"
-                >
-                  View Profile &rarr;
-                </button>
-              </div>
-            `);
-          });
+        const activePoints = mapData.filter(v => v.latitude && v.longitude);
+        if (activePoints.length > 0) {
+          if (mapMode === 'heatmap') {
+            // Plot Heatmap
+            const heatPoints = activePoints.map(v => [
+              v.latitude,
+              v.longitude,
+              v.overall_score ? (v.overall_score / 100) : 0.5
+            ]);
+            if (window.L.heatLayer) {
+              window.L.heatLayer(heatPoints, {
+                radius: 25,
+                blur: 15,
+                max: 1.0,
+                gradient: { 0.4: '#3b82f6', 0.65: '#10b981', 1.0: '#ef4444' }
+              }).addTo(map);
+            } else {
+              console.warn('Leaflet Heat plugin not loaded');
+            }
+          } else {
+            // Plot markers (with clustering if plugin exists)
+            const markersGroup = window.L.markerClusterGroup 
+              ? window.L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 40 })
+              : null;
 
-          const coords = validPoints.map(v => [v.latitude, v.longitude]);
+            activePoints.forEach(v => {
+              const score = v.overall_score || 0;
+              const color = score >= 70 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
+              const marker = window.L.circleMarker([v.latitude, v.longitude], {
+                radius: 8,
+                fillColor: color,
+                color: '#ffffff',
+                weight: 1.5,
+                opacity: 1,
+                fillOpacity: 0.85,
+              })
+              .bindPopup(`
+                <div class="map-popup" style="color: #e2e8f0; font-family: sans-serif; min-width: 150px;">
+                  <h4 style="margin: 0 0 6px 0; color: #ffffff; font-size: 13px; font-weight: 600;">${v.village_name}</h4>
+                  <div style="color: #94a3b8; font-size: 11px; margin-bottom: 4px;">${v.district}, ${v.state}</div>
+                  <div style="font-size: 11px; margin: 4px 0;">
+                    Score: <strong style="color: ${color}">${score.toFixed(1)}</strong> | Rank: <strong>#${v.overall_rank || '—'}</strong>
+                  </div>
+                  <div style="font-size: 10px; margin-bottom: 8px;">Priority: <span style="font-weight: 600; text-transform: uppercase;">${v.priority_level}</span></div>
+                  <button 
+                    onclick="window.location.hash = '#/village/${v.village_id}'; window.location.href = '/village/${v.village_id}';" 
+                    style="display: inline-block; font-size: 10px; color: #818cf8; border: 1px solid rgba(99,102,241,0.4); padding: 3px 8px; border-radius: 4px; background: rgba(99,102,241,0.1); cursor: pointer; font-weight: 500; width: 100%; text-align: center;"
+                  >
+                    View Profile &rarr;
+                  </button>
+                </div>
+              `);
+
+              if (markersGroup) {
+                markersGroup.addLayer(marker);
+              } else {
+                marker.addTo(map);
+              }
+            });
+
+            if (markersGroup) {
+              map.addLayer(markersGroup);
+            }
+          }
+
+          const coords = activePoints.map(v => [v.latitude, v.longitude]);
           map.fitBounds(coords, { padding: [40, 40] });
         } else {
           map.setView([20.5937, 78.9629], 5);
@@ -212,7 +310,7 @@ export default function RankingDashboard() {
         clearTimeout(timer);
       };
     }
-  }, [view, data]);
+  }, [view, mapData, mapMode]);
 
   // Cleanup map instance on unmount
   useEffect(() => {
@@ -247,6 +345,14 @@ export default function RankingDashboard() {
                 Active
               </span>
             )}
+          </button>
+          <button
+            className="btn btn--ghost"
+            onClick={exportToCSV}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+            id="export-csv-btn"
+          >
+            📥 Export CSV
           </button>
           <div className="view-toggle" style={{ display: 'flex', background: 'var(--bg-secondary)', padding: '4px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
             <button
@@ -403,27 +509,71 @@ export default function RankingDashboard() {
 
       {/* Main View Container */}
       {view === 'map' ? (
-        <div className="glass-panel" style={{ padding: '16px', position: 'relative', minHeight: '500px' }}>
-          {loading && (
+        <div className="glass-panel" style={{ padding: '16px', position: 'relative', minHeight: '560px' }}>
+          {mapLoading && (
             <div className="loading-state" style={{ position: 'absolute', inset: 0, background: 'rgba(10,14,26,0.8)', zIndex: 1000, borderRadius: 'var(--radius)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
               <div className="spinner" />
-              <p style={{ marginTop: '12px' }}>Loading map data...</p>
+              <p style={{ marginTop: '12px' }}>Loading geospatial data...</p>
             </div>
           )}
+
+          {/* Map Controls Overlay */}
+          <div className="map-control-overlay">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '9px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>MAP MODE</label>
+              <select 
+                className="filter-select" 
+                style={{ padding: '4px 8px', fontSize: '11px', height: 'auto', background: 'var(--bg-primary)', border: '1px solid var(--border)' }}
+                value={mapMode}
+                onChange={e => setMapMode(e.target.value)}
+                id="map-mode-select"
+              >
+                <option value="markers">📍 Clustered Markers</option>
+                <option value="heatmap">🔥 Density Heatmap</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+              <label style={{ fontSize: '9px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>MAP DENSITY</label>
+              <select 
+                className="filter-select" 
+                style={{ padding: '4px 8px', fontSize: '11px', height: 'auto', background: 'var(--bg-primary)', border: '1px solid var(--border)' }}
+                value={mapDensity}
+                onChange={e => setMapDensity(parseInt(e.target.value))}
+                id="map-density-select"
+              >
+                <option value={25}>25 Villages</option>
+                <option value={100}>100 Villages</option>
+                <option value={250}>250 Villages</option>
+                <option value={500}>500 Villages</option>
+              </select>
+            </div>
+          </div>
+
           <div id="dashboard-map" style={{ height: '520px', width: '100%', borderRadius: 'var(--radius-sm)', zIndex: 1 }} />
           <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap', gap: '8px' }}>
-            <div>* Plotted circles represent active page villages. Click a marker to view core summary.</div>
-            <div style={{ display: 'flex', gap: '14px' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} /> Developed (≥70)
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} /> Developing (50-69)
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} /> Critical (&lt;50)
-              </span>
-            </div>
+            <div>* Plotted points represent active query. Click clusters to expand or markers to view.</div>
+            {mapMode === 'heatmap' ? (
+              <div style={{ display: 'flex', gap: '14px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} /> Low Performance / High Priority
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }} /> High Performance / Low Priority
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '14px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} /> Developed (≥70)
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} /> Developing (50-69)
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} /> Critical (&lt;50)
+                </span>
+              </div>
+            )}
           </div>
         </div>
       ) : (
