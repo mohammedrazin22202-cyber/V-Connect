@@ -110,6 +110,7 @@ DOMAIN_NEGATIVE = {
         "earthquake_risk_score", "landslide_risk_score", "heat_stress_index",
         "water_table_depletion_rate", "water_scarcity_risk",
         "environmental_degradation_score", "climate_vulnerability_index",
+        "air_quality_index",
     ],
     "governance": [
         "corruption_risk_proxy", "resource_leakage_risk",
