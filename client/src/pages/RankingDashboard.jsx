@@ -111,8 +111,6 @@ export default function RankingDashboard() {
     } else {
       setFilters(prev => ({ ...prev, districts: [] }));
     }
-    setDistrict('');
-    setPage(1);
   }, [state]);
 
   const handleSort = (key) => {
@@ -473,7 +471,11 @@ export default function RankingDashboard() {
         <select
           className="filter-select"
           value={state}
-          onChange={e => setState(e.target.value)}
+          onChange={e => {
+            setState(e.target.value);
+            setDistrict('');
+            setPage(1);
+          }}
           id="filter-state"
         >
           <option value="">All States</option>
