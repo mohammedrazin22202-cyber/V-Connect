@@ -53,12 +53,12 @@ const DOMAIN_COLORS = {
 
 // High impact sliders configuration
 const SLIDER_CONFIGS = [
-  { col: 'avg_household_income', label: 'Household Income (INR)', category: 'Economy', minVal: 1000, maxVal: 50000, step: 500 },
+  { col: 'avg_household_income', label: 'Household Income (INR)', category: 'Economy', minVal: 1000, maxVal: 250000, step: 500 },
   { col: 'poverty_rate', label: 'Poverty Rate (%)', category: 'Economy', minVal: 0, maxVal: 100, step: 1 },
   { col: 'dropout_rate', label: 'School Dropout Rate (%)', category: 'Education', minVal: 0, maxVal: 100, step: 0.5 },
   { col: 'digital_literacy_rate', label: 'Digital Literacy (%)', category: 'Education', minVal: 0, maxVal: 100, step: 1 },
   { col: 'malnutrition_rate', label: 'Child Malnutrition (%)', category: 'Health', minVal: 0, maxVal: 100, step: 0.5 },
-  { col: 'avg_healthcare_access_time_min', label: 'Healthcare Access Time (min)', category: 'Health', minVal: 5, maxVal: 180, step: 5 },
+  { col: 'avg_healthcare_access_time_min', label: 'Healthcare Access Time (min)', category: 'Health', minVal: 5, maxVal: 250, step: 5 },
   { col: 'drinking_water_coverage_pct', label: 'Drinking Water Coverage (%)', category: 'Infrastructure', minVal: 0, maxVal: 100, step: 1 },
   { col: 'sanitation_coverage_pct', label: 'Sanitation Coverage (%)', category: 'Infrastructure', minVal: 0, maxVal: 100, step: 1 },
   { col: 'electricity_hours_per_day', label: 'Electricity hours/day', category: 'Infrastructure', minVal: 0, maxVal: 24, step: 1 },
@@ -122,7 +122,7 @@ export default function VillageDetail() {
       updated['malnutrition_rate'] = Math.max(0, updated['malnutrition_rate'] - 15);
       updated['avg_healthcare_access_time_min'] = Math.max(5, Math.min(updated['avg_healthcare_access_time_min'], 30));
     } else if (presetType === 'economic') {
-      updated['avg_household_income'] = Math.min(50000, updated['avg_household_income'] * 1.5);
+      updated['avg_household_income'] = Math.min(metricMeta['avg_household_income']?.max || 250000, updated['avg_household_income'] * 1.5);
       updated['poverty_rate'] = Math.max(0, updated['poverty_rate'] - 20);
     }
     
