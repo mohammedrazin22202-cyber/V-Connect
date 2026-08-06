@@ -268,7 +268,8 @@ export default function VillageDetail() {
       "poverty_rate", "farmer_debt_index", "dropout_rate", "infant_mortality_rate", 
       "malnutrition_rate", "avg_healthcare_access_time_min", "flood_risk_score", 
       "earthquake_risk_score", "climate_vulnerability_index", "corruption_risk_proxy", 
-      "total_crime_rate", "crimes_against_women_rate", "nearest_hospital_distance_km"
+      "total_crime_rate", "crimes_against_women_rate", "nearest_hospital_distance_km",
+      "air_quality_index"
     ].includes(col);
 
     return isNegative ? (100 - norm) : norm;
