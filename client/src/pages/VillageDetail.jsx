@@ -416,7 +416,7 @@ export default function VillageDetail() {
         .openPopup();
 
         // Calculate and plot simulated facilities based on distance metrics
-        const hospitalDist = village.nearest_hospital_distance_km || 5.0;
+        const hospitalDist = simulatedMetrics.nearest_hospital_distance_km || 5.0;
         const schoolDist = (simulatedMetrics.school_count > 0) ? 0.3 : 3.0;
         const marketDist = (15 - ((simulatedMetrics.market_access_score || 50) / 100) * 14.5);
 
@@ -464,7 +464,7 @@ export default function VillageDetail() {
 
       return () => clearTimeout(timer);
     }
-  }, [loading, village, simulatedMetrics.school_count, simulatedMetrics.market_access_score]);
+  }, [loading, village, simulatedMetrics.school_count, simulatedMetrics.market_access_score, simulatedMetrics.nearest_hospital_distance_km]);
 
   // Cleanup map instance on unmount
   useEffect(() => {

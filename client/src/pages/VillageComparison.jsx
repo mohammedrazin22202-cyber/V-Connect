@@ -173,16 +173,17 @@ export default function VillageComparison() {
       });
     });
     
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(','), ...rows.map(e => e.map(val => typeof val === 'string' && val.includes(',') ? `"${val}"` : val).join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = [headers.join(','), ...rows.map(e => e.map(val => typeof val === 'string' && val.includes(',') ? `"${val}"` : val).join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     const defaultName = compareData.map(c => c.village.village_name).join('_vs_');
     link.setAttribute("download", `vconnect_comparison_${defaultName}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Prepare radar overlay data
@@ -257,8 +258,8 @@ export default function VillageComparison() {
     };
   }, [compareData]);
 
-  // Highlight helper: returns index of best value for a metric
   const getBestValueIndex = (metricName, values) => {
+    if (values.length < 2) return -1;
     const validValues = values.map(v => typeof v === 'number' ? v : parseFloat(v));
     if (validValues.some(isNaN)) return -1;
 
