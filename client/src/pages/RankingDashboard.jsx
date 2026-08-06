@@ -92,6 +92,16 @@ export default function RankingDashboard() {
     fetchFilters().then(setFilters).catch(console.error);
   }, []);
 
+  // Expose global navigation for Leaflet popup
+  useEffect(() => {
+    window.navigateVillage = (id) => {
+      navigate(`/village/${id}`);
+    };
+    return () => {
+      delete window.navigateVillage;
+    };
+  }, [navigate]);
+
   // Load districts when state changes
   useEffect(() => {
     if (state) {
@@ -279,7 +289,7 @@ export default function RankingDashboard() {
                   </div>
                   <div style="font-size: 10px; margin-bottom: 8px;">Priority: <span style="font-weight: 600; text-transform: uppercase;">${v.priority_level}</span></div>
                   <button 
-                    onclick="window.location.hash = '#/village/${v.village_id}'; window.location.href = '/village/${v.village_id}';" 
+                    onclick="window.navigateVillage(${v.village_id});" 
                     style="display: inline-block; font-size: 10px; color: #818cf8; border: 1px solid rgba(99,102,241,0.4); padding: 3px 8px; border-radius: 4px; background: rgba(99,102,241,0.1); cursor: pointer; font-weight: 500; width: 100%; text-align: center;"
                   >
                     View Profile &rarr;
