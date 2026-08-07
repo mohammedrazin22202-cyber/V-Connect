@@ -46,7 +46,6 @@ function formatMetricName(name) {
 }
 
 export default function VillageComparison() {
-  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
