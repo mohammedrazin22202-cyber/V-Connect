@@ -346,7 +346,7 @@ export default function VillageDetail() {
       totalDeficit += def;
     });
 
-    return Object.entries(simulatedScores).map(([cat, score]) => {
+    return Object.entries(simulatedScores).map(([cat]) => {
       const ratio = totalDeficit > 0 ? (deficits[cat] / totalDeficit) : (1 / 7);
       return {
         name: cat,
