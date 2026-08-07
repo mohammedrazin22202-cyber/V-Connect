@@ -64,6 +64,7 @@ const SLIDER_CONFIGS = [
   { col: 'internet_penetration%', label: 'Internet Penetration (%)', category: 'Infrastructure', minVal: 0, maxVal: 100, step: 1 },
 ];
 
+// Cost factors and impact direction coefficients representing development priorities for budget optimization.
 const OPTIMIZER_FACTORS = {
   avg_household_income: { costFactor: 300, isPositive: true },
   poverty_rate: { costFactor: 15000, isPositive: false },
