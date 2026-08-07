@@ -5,7 +5,6 @@ import {
   ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { fetchVillage, fetchSimulatedRank } from '../api';
-import ScoreBar from '../components/ScoreBar';
 
 const DOMAIN_LABELS = {
   economy_score: 'Economy',
