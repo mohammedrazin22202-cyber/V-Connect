@@ -103,6 +103,7 @@ export default function VillageDetail() {
   const [customBudget, setCustomBudget] = useState('');
   const [activePreset, setActivePreset] = useState(null);
 
+  // Apply pre-configured simulation presets to evaluate specific development campaign outcomes
   const applyPreset = (presetType) => {
     const updated = {};
     Object.values(metrics).forEach(items => {
