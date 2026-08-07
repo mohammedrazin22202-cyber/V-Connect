@@ -253,7 +253,7 @@ export default function VillageDetail() {
   };
 
   // Normalization math helper
-  const getNormalizedValue = (col, val) => {
+  const getNormalizedValue = useCallback((col, val) => {
     const colMeta = metricMeta[col];
     if (!colMeta) return 50.0;
     const { min, max } = colMeta;
@@ -272,7 +272,7 @@ export default function VillageDetail() {
     ].includes(col);
 
     return isNegative ? (100 - norm) : norm;
-  };
+  }, [metricMeta]);
 
   // Compute a single category score based on simulated values
   const getSimulatedCategoryScore = (category) => {
