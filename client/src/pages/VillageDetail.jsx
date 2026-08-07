@@ -275,7 +275,7 @@ export default function VillageDetail() {
   }, [metricMeta]);
 
   // Compute a single category score based on simulated values
-  const getSimulatedCategoryScore = (category) => {
+  const getSimulatedCategoryScore = useCallback((category) => {
     const cols = METRIC_MAP[category];
     let sum = 0;
     let count = 0;
@@ -287,7 +287,7 @@ export default function VillageDetail() {
       }
     });
     return count > 0 ? Number((sum / count).toFixed(2)) : 50.0;
-  };
+  }, [simulatedMetrics, getNormalizedValue]);
 
   // Memoized simulated domain scores
   const simulatedScores = useMemo(() => {
