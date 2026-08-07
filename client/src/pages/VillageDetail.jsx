@@ -712,6 +712,7 @@ export default function VillageDetail() {
                     onChange={e => {
                       const v = parseFloat(e.target.value);
                       setSimulatedMetrics(prev => ({ ...prev, [cfg.col]: v }));
+                      setActivePreset(null);
                     }}
                     style={{ width: '100%', accentColor: color, cursor: 'pointer', height: '5px' }}
                   />
