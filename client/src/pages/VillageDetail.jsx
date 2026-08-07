@@ -297,7 +297,7 @@ export default function VillageDetail() {
       scores[cat] = getSimulatedCategoryScore(cat);
     });
     return scores;
-  }, [simulatedMetrics, village, metricMeta]);
+  }, [village, getSimulatedCategoryScore]);
 
   // Memoized overall score
   const simulatedOverallScore = useMemo(() => {
