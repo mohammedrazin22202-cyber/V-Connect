@@ -50,3 +50,28 @@ export async function fetchStateComparison(states = []) {
   const res = await fetch(`${API_BASE}/compare/states${query}`);
   return res.json();
 }
+
+export async function fetchRegionalSimulation(params = {}) {
+  const query = new URLSearchParams();
+  if (params.state) query.set('state', params.state);
+  if (params.district) query.set('district', params.district);
+  if (params.budget) query.set('budget', params.budget);
+  if (params.strategy) query.set('strategy', params.strategy);
+
+  const res = await fetch(`${API_BASE}/simulation/region?${query}`);
+  return res.json();
+}
+
+export async function updateVillageBudget(payload = {}) {
+  const res = await fetch(`${API_BASE}/admin/update-budget`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+export async function fetchAdminStats() {
+  const res = await fetch(`${API_BASE}/admin/stats`);
+  return res.json();
+}
