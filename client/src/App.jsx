@@ -4,6 +4,10 @@ import RankingDashboard from './pages/RankingDashboard';
 import VillageDetail from './pages/VillageDetail';
 import StateComparison from './pages/StateComparison';
 import VillageComparison from './pages/VillageComparison';
+import PolicySandbox from './pages/PolicySandbox';
+import SpatialAnalytics from './pages/SpatialAnalytics';
+import ReportBuilder from './pages/ReportBuilder';
+import AdminPortal from './pages/AdminPortal';
 import Sidebar from './components/Sidebar';
 import './index.css';
 
@@ -37,6 +41,10 @@ function App() {
             <Route path="/village/:id" element={<VillageDetail />} />
             <Route path="/compare" element={<StateComparison />} />
             <Route path="/compare-villages" element={<VillageComparison />} />
+            <Route path="/sandbox" element={<PolicySandbox />} />
+            <Route path="/analytics" element={<SpatialAnalytics />} />
+            <Route path="/reports" element={<ReportBuilder />} />
+            <Route path="/admin" element={<AdminPortal />} />
           </Routes>
         </main>
       </div>
