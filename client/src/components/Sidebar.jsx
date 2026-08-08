@@ -5,6 +5,10 @@ const navItems = [
   { path: '/', label: 'Rankings', icon: '📊' },
   { path: '/compare', label: 'State Comparison', icon: '🗺️' },
   { path: '/compare-villages', label: 'Village Comparison', icon: '🏘️' },
+  { path: '/sandbox', label: 'Policy Sandbox', icon: '🧪' },
+  { path: '/analytics', label: 'Spatial Analytics', icon: '🌍' },
+  { path: '/reports', label: 'Report Builder', icon: '📋' },
+  { path: '/admin', label: 'Admin Portal', icon: '⚙️' },
 ];
 
 export default function Sidebar({ isOpen, onClose }) {
