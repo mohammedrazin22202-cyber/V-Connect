@@ -22,11 +22,11 @@ app.use(express.json());
 // ── Database Connection ────────────────────────────────────────────────
 let db;
 try {
-  db = new Database(DB_PATH, { readonly: true });
+  db = new Database(DB_PATH); // Read-write connection enabled
   db.pragma("cache_size = -128000"); // 128MB cache
   db.pragma("temp_store = MEMORY");
   db.pragma("mmap_size = 268435456"); // 256MB mmap
-  console.log("✓ Connected to SQLite database");
+  console.log("✓ Connected to SQLite database (read-write)");
 } catch (err) {
   console.error("✗ Failed to open database:", err.message);
   console.error("  Run 'python ingest.py' first to create the database.");
@@ -322,6 +322,335 @@ app.get("/api/compare/states", (req, res) => {
     res.json({ data });
   } catch (err) {
     console.error("Compare states error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/simulation/region ─────────────────────────────────────────
+// Runs a budget optimization simulation across an entire district or state
+app.get("/api/simulation/region", (req, res) => {
+  try {
+    const state = req.query.state;
+    const district = req.query.district;
+    const totalBudget = parseFloat(req.query.budget || 5000000);
+    const strategy = req.query.strategy || "balanced";
+
+    if (!state || !district) {
+      return res.status(400).json({ error: "Missing state or district parameter" });
+    }
+
+    // Fetch all matching villages in that district
+    const query = `
+      SELECT v.village_id, v.village_name, v.district, v.state, v.total_population, v.priority_level, v.recommended_budget_inr,
+             d.economy_score, d.education_score, d.health_score, d.infrastructure_score, d.environment_score, d.governance_score, d.social_score, d.overall_score
+      FROM villages v
+      JOIN domain_scores d ON v.village_id = d.village_id
+      WHERE v.state = ? AND v.district = ?
+    `;
+    const villages = db.prepare(query).all(state, district);
+
+    if (villages.length === 0) {
+      return res.json({ success: true, strategy, budget: totalBudget, summary: {}, domainBudgetSpent: {}, topImproved: [], villages: [] });
+    }
+
+    // Cost factors and optimizer parameters
+    const OPTIMIZER_FACTORS = {
+      avg_household_income: { costFactor: 300, isPositive: true, domain: "economy" },
+      poverty_rate: { costFactor: 15000, isPositive: false, domain: "economy" },
+      dropout_rate: { costFactor: 10000, isPositive: false, domain: "education" },
+      digital_literacy_rate: { costFactor: 8000, isPositive: true, domain: "education" },
+      malnutrition_rate: { costFactor: 25000, isPositive: false, domain: "health" },
+      avg_healthcare_access_time_min: { costFactor: 4000, isPositive: false, domain: "health" },
+      drinking_water_coverage_pct: { costFactor: 12000, isPositive: true, domain: "infrastructure" },
+      sanitation_coverage_pct: { costFactor: 10000, isPositive: true, domain: "infrastructure" },
+      electricity_hours_per_day: { costFactor: 30000, isPositive: true, domain: "infrastructure" },
+      "internet_penetration%": { costFactor: 5000, isPositive: true, domain: "infrastructure" }
+    };
+
+    // Modify cost factors according to strategy
+    const currentFactors = {};
+    for (const [key, val] of Object.entries(OPTIMIZER_FACTORS)) {
+      currentFactors[key] = { ...val };
+      if (strategy === val.domain) {
+        currentFactors[key].costFactor *= 0.3; // Strategy domains are 70% cheaper to improve (representing targeted policy efficiency)
+      } else if (strategy !== "balanced") {
+        currentFactors[key].costFactor *= 1.5; // Other domains are more expensive in focused strategies
+      }
+    }
+
+    // Step configuration
+    const SLIDER_CONFIGS = [
+      { col: 'avg_household_income', minVal: 1000, maxVal: 250000, step: 500 },
+      { col: 'poverty_rate', minVal: 0, maxVal: 100, step: 1 },
+      { col: 'dropout_rate', minVal: 0, maxVal: 100, step: 0.5 },
+      { col: 'digital_literacy_rate', minVal: 0, maxVal: 100, step: 1 },
+      { col: 'malnutrition_rate', minVal: 0, maxVal: 100, step: 0.5 },
+      { col: 'avg_healthcare_access_time_min', minVal: 5, maxVal: 250, step: 5 },
+      { col: 'drinking_water_coverage_pct', minVal: 0, maxVal: 100, step: 1 },
+      { col: 'sanitation_coverage_pct', minVal: 0, maxVal: 100, step: 1 },
+      { col: 'electricity_hours_per_day', minVal: 0, maxVal: 24, step: 1 },
+      { col: 'internet_penetration%', minVal: 0, maxVal: 100, step: 1 },
+    ];
+
+    const METRIC_MAP_SIM = {
+      economy: ["avg_household_income", "poverty_rate"],
+      education: ["dropout_rate", "digital_literacy_rate"],
+      health: ["malnutrition_rate", "avg_healthcare_access_time_min"],
+      infrastructure: ["drinking_water_coverage_pct", "sanitation_coverage_pct", "electricity_hours_per_day", "internet_penetration%"],
+    };
+
+    // Calculate baseline stats
+    let totalPopulation = 0;
+    let sumOverallScore = 0;
+    
+    // Sort villages by overall score (ascending) so budget is distributed starting with the most in-need
+    const sortedVillages = [...villages].sort((a, b) => a.overall_score - b.overall_score);
+
+    // Let's allocate budget.
+    // Proportional to: population * (100 - overall_score) * priority weight
+    const priorityWeights = { critical: 4, high: 3, medium: 2, moderate: 2, stable: 1, low: 1 };
+    
+    let totalNeedWeight = 0;
+    const villageNeeds = sortedVillages.map(v => {
+      totalPopulation += v.total_population || 0;
+      sumOverallScore += v.overall_score || 0;
+      
+      const scoreDeficit = Math.max(0, 100 - (v.overall_score || 50));
+      const priorityWeight = priorityWeights[(v.priority_level || "").toLowerCase()] || 1;
+      const needWeight = (v.total_population || 1000) * scoreDeficit * priorityWeight;
+      
+      totalNeedWeight += needWeight;
+      return { id: v.village_id, needWeight };
+    });
+
+    const baselineAvgScore = sumOverallScore / villages.length;
+    
+    // Allocate budget to each village based on need weight
+    let allocatedBudgetSum = 0;
+    const villageBudgets = {};
+    villageNeeds.forEach(vn => {
+      const share = totalNeedWeight > 0 ? (vn.needWeight / totalNeedWeight) : (1 / villages.length);
+      const alloc = Math.round(totalBudget * share);
+      villageBudgets[vn.id] = alloc;
+      allocatedBudgetSum += alloc;
+    });
+
+    // Fetch all raw metrics for matching villages in one SQL query
+    const colsToFetch = ["village_id", "avg_household_income", "poverty_rate", "dropout_rate", "digital_literacy_rate", "malnutrition_rate", "avg_healthcare_access_time_min", "drinking_water_coverage_pct", "sanitation_coverage_pct", "electricity_hours_per_day", "[internet_penetration%]"];
+    const rawData = db.prepare(`SELECT ${colsToFetch.map(c => `v.${c}`).join(", ")} FROM villages v WHERE v.state = ? AND v.district = ?`).all(state, district);
+    
+    const rawMetricsMap = {};
+    rawData.forEach(row => {
+      rawMetricsMap[row.village_id] = row;
+    });
+
+    // Normalization logic
+    const getNormalizedValue = (col, val) => {
+      const colMeta = metricMeta[col];
+      if (!colMeta) return 50.0;
+      const { min, max } = colMeta;
+      if (min === max) return 50.0;
+      let norm = ((val - min) / (max - min)) * 100;
+      norm = Math.min(100, Math.max(0, norm));
+      const isNegative = ["poverty_rate", "dropout_rate", "malnutrition_rate", "avg_healthcare_access_time_min"].includes(col);
+      return isNegative ? (100 - norm) : norm;
+    };
+
+    const simulatedVillages = [];
+    let simulatedSumOverallScore = 0;
+    const domainBudgetSpent = { economy: 0, education: 0, health: 0, infrastructure: 0, environment: 0, governance: 0, social: 0 };
+
+    sortedVillages.forEach(v => {
+      const vid = v.village_id;
+      const budget = villageBudgets[vid] || 0;
+      const raw = rawMetricsMap[vid] || {};
+
+      // Initialize simulated metrics
+      const simMetrics = {};
+      SLIDER_CONFIGS.forEach(cfg => {
+        const dbCol = cfg.col === "internet_penetration%" ? "internet_penetration%" : cfg.col;
+        simMetrics[cfg.col] = raw[dbCol] !== undefined ? raw[dbCol] : (metricMeta[cfg.col]?.min || 0);
+      });
+
+      // Simple gradient step loop per village
+      let remaining = budget;
+      let stepsCount = 0;
+      const maxSteps = 100;
+
+      while (remaining > 0 && stepsCount < maxSteps) {
+        let bestMetric = null;
+        let bestROI = -1;
+        let bestStepCost = 0;
+        let bestNextVal = 0;
+
+        SLIDER_CONFIGS.forEach(cfg => {
+          const col = cfg.col;
+          const currentVal = simMetrics[col];
+          const config = currentFactors[col];
+          if (!config) return;
+
+          let stepVal = cfg.step;
+          let nextVal;
+          if (config.isPositive) {
+            nextVal = Math.min(cfg.maxVal, currentVal + stepVal);
+          } else {
+            nextVal = Math.max(cfg.minVal, currentVal - stepVal);
+          }
+
+          if (nextVal === currentVal) return;
+
+          const valChange = Math.abs(nextVal - currentVal);
+          const stepCost = valChange * config.costFactor;
+
+          if (stepCost > remaining) return;
+
+          const currentNorm = getNormalizedValue(col, currentVal);
+          const nextNorm = getNormalizedValue(col, nextVal);
+          const normGain = nextNorm - currentNorm;
+
+          const roi = normGain / stepCost;
+          if (roi > bestROI && normGain > 0) {
+            bestROI = roi;
+            bestMetric = col;
+            bestStepCost = stepCost;
+            bestNextVal = nextVal;
+          }
+        });
+
+        if (!bestMetric) break;
+
+        simMetrics[bestMetric] = bestNextVal;
+        remaining -= bestStepCost;
+        const colDomain = currentFactors[bestMetric].domain;
+        domainBudgetSpent[colDomain] += bestStepCost;
+        stepsCount++;
+      }
+
+      // Recompute domain scores and overall score
+      const simScores = {
+        economy: v.economy_score,
+        education: v.education_score,
+        health: v.health_score,
+        infrastructure: v.infrastructure_score,
+        environment: v.environment_score,
+        governance: v.governance_score,
+        social: v.social_score
+      };
+
+      // Recalculate only the optimized domains
+      Object.entries(METRIC_MAP_SIM).forEach(([domain, cols]) => {
+        if (cols.length > 0) {
+          let sum = 0;
+          cols.forEach(col => {
+            sum += getNormalizedValue(col, simMetrics[col]);
+          });
+          simScores[domain] = sum / cols.length;
+        }
+      });
+
+      const simOverallScore = (simScores.economy + simScores.education + simScores.health + simScores.infrastructure + simScores.environment + simScores.governance + simScores.social) / 7;
+      simulatedSumOverallScore += simOverallScore;
+
+      simulatedVillages.push({
+        village_id: vid,
+        village_name: v.village_name,
+        overall_score: v.overall_score,
+        simulated_overall_score: Number(simOverallScore.toFixed(2)),
+        score_gain: Number((simOverallScore - v.overall_score).toFixed(2)),
+        budget_allocated: budget,
+        priority_level: v.priority_level
+      });
+    });
+
+    const simulatedAvgScore = simulatedSumOverallScore / villages.length;
+    const avgScoreGain = simulatedAvgScore - baselineAvgScore;
+
+    // Estimate rank shift:
+    const { rank: baselineRank } = db.prepare("SELECT COUNT(*) + 1 as rank FROM domain_scores WHERE overall_score > ?").get(baselineAvgScore);
+    const { rank: simulatedRank } = db.prepare("SELECT COUNT(*) + 1 as rank FROM domain_scores WHERE overall_score > ?").get(simulatedAvgScore);
+    const rankImprovement = baselineRank - simulatedRank;
+
+    // Get top 5 improved villages
+    const topImproved = [...simulatedVillages]
+      .sort((a, b) => b.score_gain - a.score_gain)
+      .slice(0, 5);
+
+    res.json({
+      success: true,
+      strategy,
+      budget: totalBudget,
+      summary: {
+        totalVillages: villages.length,
+        totalPopulation,
+        baselineAvgScore: Number(baselineAvgScore.toFixed(2)),
+        simulatedAvgScore: Number(simulatedAvgScore.toFixed(2)),
+        avgScoreGain: Number(avgScoreGain.toFixed(2)),
+        baselineRank,
+        simulatedRank,
+        rankImprovement,
+        allocatedBudgetSum,
+      },
+      domainBudgetSpent,
+      topImproved,
+      villages: simulatedVillages.slice(0, 100)
+    });
+  } catch (err) {
+    console.error("Simulation error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/admin/update-budget ──────────────────────────────────────
+// Updates recommended budget & priority level for a village in the database
+app.post("/api/admin/update-budget", (req, res) => {
+  try {
+    const { village_id, recommended_budget_inr, priority_level } = req.body;
+
+    if (!village_id) {
+      return res.status(400).json({ error: "Missing village_id" });
+    }
+
+    const stmt = db.prepare(`
+      UPDATE villages
+      SET recommended_budget_inr = ?, priority_level = ?
+      WHERE village_id = ?
+    `);
+    const result = stmt.run(recommended_budget_inr, priority_level, village_id);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: "Village not found or no changes made" });
+    }
+
+    res.json({ success: true, message: `Village ${village_id} updated successfully.` });
+  } catch (err) {
+    console.error("Admin update budget error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/admin/stats ───────────────────────────────────────────────
+// Get SQLite database metadata, tables, indexes, and sizes
+app.get("/api/admin/stats", (req, res) => {
+  try {
+    const villageCountRow = db.prepare("SELECT COUNT(*) as count FROM villages").get();
+    const scoreCountRow = db.prepare("SELECT COUNT(*) as count FROM domain_scores").get();
+    
+    // Count distinct states and districts in precalculated filter or DB
+    const stateCountRow = db.prepare("SELECT COUNT(DISTINCT state) as count FROM villages").get();
+    const districtCountRow = db.prepare("SELECT COUNT(DISTINCT district) as count FROM villages").get();
+
+    const dbSize = require("fs").statSync(DB_PATH).size;
+
+    res.json({
+      villageCount: villageCountRow.count,
+      scoreCount: scoreCountRow.count,
+      stateCount: stateCountRow.count,
+      districtCount: districtCountRow.count,
+      databaseSizeMB: (dbSize / (1024 * 1024)).toFixed(2),
+      dbPath: DB_PATH,
+    });
+  } catch (err) {
+    console.error("Admin stats error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
