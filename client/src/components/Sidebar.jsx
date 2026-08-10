@@ -7,6 +7,7 @@ const navItems = [
   { path: '/compare-villages', label: 'Village Comparison', icon: '🏘️' },
   { path: '/sandbox', label: 'Policy Sandbox', icon: '🧪' },
   { path: '/analytics', label: 'Spatial Analytics', icon: '🌍' },
+  { path: '/predictive', label: 'Predictive Analytics', icon: '🔮' },
   { path: '/reports', label: 'Report Builder', icon: '📋' },
   { path: '/admin', label: 'Admin Portal', icon: '⚙️' },
 ];
