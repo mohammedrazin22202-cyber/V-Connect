@@ -746,6 +746,55 @@ app.get("/api/analytics/correlation", (req, res) => {
   }
 });
 
+// ── GET/POST /api/admin/run-pipeline ───────────────────────────────────
+let activeProcess = null;
+let pipelineLogsBuffer = [];
+
+app.post("/api/admin/run-pipeline", (req, res) => {
+  const { pipeline } = req.body;
+  if (activeProcess) {
+    return res.status(400).json({ error: "Pipeline already running" });
+  }
+
+  pipelineLogsBuffer = [`[VCONNECT SYSTEM] Spawn job for ${pipeline}...`];
+  const { spawn } = require("child_process");
+  
+  let script = "ingest.py";
+  let args = [];
+  
+  if (pipeline === "scraper") {
+    script = "village_profile.py";
+    args = ["--input", "mock_input.csv", "--headless"];
+  }
+
+  try {
+    activeProcess = spawn("python", [script, ...args], {
+      cwd: __dirname,
+      env: { ...process.env, PYTHONUNBUFFERED: "1" }
+    });
+
+    activeProcess.stdout.on("data", (data) => {
+      const str = data.toString().trim();
+      if (str) pipelineLogsBuffer.push(`[STDOUT] ${str}`);
+    });
+
+    activeProcess.stderr.on("data", (data) => {
+      const str = data.toString().trim();
+      if (str) pipelineLogsBuffer.push(`[STDERR] ${str}`);
+    });
+
+    activeProcess.on("close", (code) => {
+      pipelineLogsBuffer.push(`[VCONNECT SYSTEM] Process exited with code ${code}`);
+      activeProcess = null;
+    });
+
+    res.json({ success: true, message: `Pipeline ${pipeline} started.` });
+  } catch (err) {
+    console.error("Pipeline spawn error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Start Server ───────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🏘  VCONNECT API running at http://localhost:${PORT}`);
