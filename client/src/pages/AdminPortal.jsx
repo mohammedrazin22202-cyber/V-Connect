@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { fetchAdminStats, fetchRankings, updateVillageBudget } from '../api';
+import { useState, useEffect, useRef } from 'react';
+import { fetchAdminStats, fetchRankings, updateVillageBudget, triggerPipelineRun, streamPipelineLogs } from '../api';
 
 export default function AdminPortal() {
   const [stats, setStats] = useState(null);
@@ -22,9 +22,22 @@ export default function AdminPortal() {
   const [validating, setValidating] = useState(false);
   const [ingesting, setIngesting] = useState(false);
 
+  // Subprocess Pipeline states
+  const [selectedPipeline, setSelectedPipeline] = useState('ingest'); // 'scraper' | 'ingest'
+  const [runningPipeline, setRunningPipeline] = useState(false);
+  const [pipelineLogs, setPipelineLogs] = useState([]);
+  const logTerminalRef = useRef(null);
+
   useEffect(() => {
     loadStats();
   }, []);
+
+  // Auto-scroll pipeline terminal
+  useEffect(() => {
+    if (logTerminalRef.current) {
+      logTerminalRef.current.scrollTop = logTerminalRef.current.scrollHeight;
+    }
+  }, [pipelineLogs]);
 
   const loadStats = () => {
     setLoadingStats(true);
@@ -142,6 +155,37 @@ export default function AdminPortal() {
     }, 600);
   };
 
+  const handleRunPipeline = async () => {
+    setRunningPipeline(true);
+    setPipelineLogs([`[VCONNECT SYSTEM] Dispatching command trigger for background pipeline: ${selectedPipeline}...`]);
+
+    try {
+      const res = await triggerPipelineRun(selectedPipeline);
+      if (res.success) {
+        streamPipelineLogs(
+          (log) => {
+            setPipelineLogs(prev => [...prev, log]);
+          },
+          (status) => {
+            if (status === 'complete') {
+              setRunningPipeline(false);
+              loadStats();
+            } else if (status === 'error') {
+              setPipelineLogs(prev => [...prev, '❌ Lost connection to background streaming log feed.']);
+              setRunningPipeline(false);
+            }
+          }
+        );
+      } else {
+        setPipelineLogs(prev => [...prev, `❌ Remote execution failed: ${res.error}`]);
+        setRunningPipeline(false);
+      }
+    } catch (err) {
+      setPipelineLogs(prev => [...prev, `❌ Error: ${err.message}`]);
+      setRunningPipeline(false);
+    }
+  };
+
   return (
     <div className="dashboard animate-in">
       <header className="dashboard-header">
@@ -190,7 +234,7 @@ export default function AdminPortal() {
       )}
 
       {/* Main split dashboard admin controls */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginBottom: '24px' }}>
         
         {/* Priority & Budget Override (Left) */}
         <div className="glass-panel" style={{ padding: '20px' }}>
@@ -363,6 +407,78 @@ export default function AdminPortal() {
         </div>
 
       </div>
+
+      {/* Real Script subprocess terminal console (Full Width) */}
+      <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
+        <h3 className="panel-title" style={{ marginBottom: '6px' }}>⚙️ Script Pipeline runner</h3>
+        <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+          Execute scraping campaigns or full SQLite database metric recalculations directly. Watch stdout outputs in real-time.
+        </p>
+
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          <select 
+            className="filter-select"
+            style={{ width: '260px' }}
+            value={selectedPipeline}
+            onChange={e => setSelectedPipeline(e.target.value)}
+            disabled={runningPipeline}
+            id="pipeline-select"
+          >
+            <option value="ingest">⚡ SQLite Database Recalculator Ingestion (ingest.py)</option>
+            <option value="scraper">🕷️ Playwright Google Maps Scraper (village_profile.py)</option>
+          </select>
+
+          <button 
+            className="btn btn--primary"
+            onClick={handleRunPipeline}
+            disabled={runningPipeline}
+            id="pipeline-run-btn"
+            style={{ padding: '8px 20px' }}
+          >
+            {runningPipeline ? '⏳ Job In Progress...' : '⚡ Run Pipeline'}
+          </button>
+        </div>
+
+        {/* Terminal display log */}
+        {(pipelineLogs.length > 0 || runningPipeline) && (
+          <div 
+            ref={logTerminalRef}
+            style={{
+              background: '#040711',
+              border: '1px solid #1e293b',
+              borderRadius: '6px',
+              padding: '16px',
+              fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace',
+              fontSize: '11px',
+              lineHeight: '1.5',
+              maxHeight: '280px',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.8)'
+            }} 
+            className="custom-scrollbar"
+          >
+            {pipelineLogs.map((log, idx) => (
+              <span 
+                key={idx} 
+                style={{ 
+                  color: log.includes("❌") || log.includes("[STDERR]") ? '#ef4444' : log.includes("✓") || log.includes("[OK]") || log.includes("SUCCESS") ? '#10b981' : '#cbd5e1'
+                }}
+              >
+                {log}
+              </span>
+            ))}
+            {runningPipeline && (
+              <span className="animate-pulse" style={{ color: 'var(--accent)', fontWeight: 'bold' }}>
+                ▋ [Process active - awaiting output buffers...]
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
