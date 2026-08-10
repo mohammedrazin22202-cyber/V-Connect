@@ -904,6 +904,30 @@ app.get("/api/admin/pipeline-logs", (req, res) => {
   });
 });
 
+// ── GET /api/stats/districts ───────────────────────────────────────────
+app.get("/api/stats/districts", (req, res) => {
+  try {
+    const districts = db.prepare(`
+      SELECT 
+        district, 
+        state, 
+        COUNT(*) as total_villages,
+        SUM(total_population) as total_population,
+        AVG(latitude) as latitude,
+        AVG(longitude) as longitude,
+        AVG(overall_score) as avg_score
+      FROM villages
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+      GROUP BY district, state
+      ORDER BY avg_score DESC
+    `).all();
+    res.json(districts);
+  } catch (err) {
+    console.error("Districts error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Start Server ───────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🏘  VCONNECT API running at http://localhost:${PORT}`);
