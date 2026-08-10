@@ -12,6 +12,7 @@ const INDICATORS = [
 export default function SpatialAnalytics() {
   const [filters, setFilters] = useState({ states: [], districts: [], priorities: [] });
   const [state, setState] = useState('');
+  const [viewMode, setViewMode] = useState('villages');
   const [district, setDistrict] = useState('');
   const [activeIndicator, setActiveIndicator] = useState('none');
   const [villages, setVillages] = useState([]);
