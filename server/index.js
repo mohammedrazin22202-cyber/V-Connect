@@ -928,6 +928,73 @@ app.get("/api/stats/districts", (req, res) => {
   }
 });
 
+// ── GET /api/analytics/correlation ────────────────────────────────────
+app.get("/api/analytics/correlation", (req, res) => {
+  const { var1, var2 } = req.query;
+  try {
+    if (!var1 || !var2) {
+      const domains = [
+        'overall_score', 'education_score', 'health_score', 
+        'infrastructure_score', 'governance_score', 'economy_score', 
+        'demographics_score', 'environment_score'
+      ];
+      const matrix = {};
+      domains.forEach(d1 => {
+        matrix[d1] = {};
+        domains.forEach(d2 => {
+          if (d1 === d2) {
+            matrix[d1][d2] = 1.0;
+          } else {
+            const val = db.prepare(`
+              SELECT (
+                (COUNT(*) * SUM(v.${d1} * v.${d2}) - SUM(v.${d1}) * SUM(v.${d2})) /
+                (
+                  SQRT(COUNT(*) * SUM(v.${d1} * v.${d1}) - SUM(v.${d1}) * SUM(v.${d1})) *
+                  SQRT(COUNT(*) * SUM(v.${d2} * v.${d2}) - SUM(v.${d2}) * SUM(v.${d2}))
+                )
+              ) as r
+              FROM villages v
+            `).get().r;
+            matrix[d1][d2] = parseFloat(val?.toFixed(3)) || 0;
+          }
+        });
+      });
+      return res.json({ type: 'matrix', matrix });
+    }
+
+    const stat = db.prepare(`
+      SELECT (
+        (COUNT(*) * SUM(v.${var1} * v.${var2}) - SUM(v.${var1}) * SUM(v.${var2})) /
+        (
+          SQRT(COUNT(*) * SUM(v.${var1} * v.${var1}) - SUM(v.${var1}) * SUM(v.${var1})) *
+          SQRT(COUNT(*) * SUM(v.${var2} * v.${var2}) - SUM(v.${var2}) * SUM(v.${var2}))
+        )
+      ) as r
+      FROM villages v
+    `).get();
+
+    const points = db.prepare(`
+      SELECT 
+        v.village_id, 
+        v.village_name, 
+        v.${var1} as x, 
+        v.${var2} as y 
+      FROM villages v
+      WHERE (v.village_id % 47 = 0)
+      LIMIT 800
+    `).all();
+
+    res.json({
+      type: 'bivariate',
+      r: parseFloat(stat.r?.toFixed(3)) || 0,
+      points
+    });
+  } catch (err) {
+    console.error("Correlation error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Start Server ───────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🏘  VCONNECT API running at http://localhost:${PORT}`);
