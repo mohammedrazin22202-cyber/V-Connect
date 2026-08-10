@@ -87,6 +87,10 @@ function formatMetricName(name) {
     .replace(/\b\w/g, c => c.toUpperCase());
 }
 
+const PROJECTS = [
+  { id: 'water_grid', name: '💧 Household Tap Water Grid', cost: 1200000, desc: 'Installs direct piped clean water taps across GP.', metrics: { drinking_water_coverage_pct: 98.0 } }
+];
+
 export default function VillageDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
