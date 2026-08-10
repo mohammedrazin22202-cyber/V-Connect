@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { fetchFilters, fetchRankings, fetchVillage } from '../api';
+import { fetchFilters, fetchRankings, fetchVillage, fetchDistrictAggregates } from '../api';
 
 const INDICATORS = [
   { key: 'none', label: 'Overall Development Score' },
@@ -12,20 +12,42 @@ const INDICATORS = [
 export default function SpatialAnalytics() {
   const [filters, setFilters] = useState({ states: [], districts: [], priorities: [] });
   const [state, setState] = useState('');
-  const [viewMode, setViewMode] = useState('villages');
   const [district, setDistrict] = useState('');
   const [activeIndicator, setActiveIndicator] = useState('none');
+  
+  const [viewMode, setViewMode] = useState('districts'); // 'districts' | 'villages'
+  const [districtsData, setDistrictsData] = useState([]);
   const [villages, setVillages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedVillage, setSelectedVillage] = useState(null);
   
-  const mapRef = useRef(null);
   const leafletMapInstance = useRef(null);
   const markersGroupRef = useRef(null);
 
-  // Load initial filter states
+  // Load initial filter states and district aggregates
   useEffect(() => {
     fetchFilters().then(setFilters).catch(console.error);
+    setLoading(true);
+    fetchDistrictAggregates()
+      .then(res => {
+        if (res.success) {
+          setDistrictsData(res.data || []);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Expose global drilldown hook
+  useEffect(() => {
+    window.drillDownDistrict = (s, d) => {
+      setState(s);
+      setDistrict(d);
+      setViewMode('villages');
+    };
+    return () => {
+      delete window.drillDownDistrict;
+    };
   }, []);
 
   // Update districts on state change
@@ -41,18 +63,17 @@ export default function SpatialAnalytics() {
     }
   }, [state]);
 
-  // Load village coordinates from ranking API with a higher limit (150 villages) for geospatial mapping
+  // Load village coordinates when filters change
   const loadGeospatialData = useCallback(async () => {
     if (!state || !district) return;
     setLoading(true);
     try {
-      // We load details by calling rankings with district & state filters and limit=150
       const result = await fetchRankings({
         state,
         district,
         limit: 150,
         sort_by: 'overall_score',
-        order: 'asc' // load poorest first
+        order: 'asc'
       });
       setVillages(result.data || []);
     } catch (err) {
@@ -62,15 +83,20 @@ export default function SpatialAnalytics() {
   }, [state, district]);
 
   useEffect(() => {
-    loadGeospatialData();
-  }, [loadGeospatialData]);
+    if (viewMode === 'villages') {
+      loadGeospatialData();
+    }
+  }, [viewMode, loadGeospatialData]);
 
-  // Determine if a village is flagged as deficient under the active indicator filter
-  // Since rankings return basic columns, some detailed metrics may require loading or we can use the pre-fetched domain scores / columns
+  // Handle auto view shift
+  useEffect(() => {
+    if (state && district) {
+      setViewMode('villages');
+    }
+  }, [state, district]);
+
   const getDeficiencyStatus = useCallback((v) => {
     if (activeIndicator === 'none') return false;
-    
-    // Overall scores or domain scores are returned in the rankings response
     if (activeIndicator === 'water_sanitation') {
       return (v.infrastructure_score || 50) < 50;
     }
@@ -90,6 +116,11 @@ export default function SpatialAnalytics() {
     return villages.filter(v => getDeficiencyStatus(v));
   }, [villages, getDeficiencyStatus]);
 
+  const filteredDistricts = useMemo(() => {
+    if (!state) return districtsData;
+    return districtsData.filter(d => d.state === state);
+  }, [districtsData, state]);
+
   // Initialize and update Leaflet Map
   useEffect(() => {
     if (window.L) {
@@ -97,7 +128,6 @@ export default function SpatialAnalytics() {
         const container = document.getElementById('analytics-map');
         if (!container) return;
 
-        // If map doesn't exist yet, create it
         if (!leafletMapInstance.current) {
           const map = window.L.map('analytics-map', {
             zoomControl: true,
@@ -118,69 +148,105 @@ export default function SpatialAnalytics() {
           map.removeLayer(markersGroupRef.current);
         }
 
-        const markersGroup = window.L.markerClusterGroup 
-          ? window.L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 40 })
-          : window.L.featureGroup();
+        const markersGroup = window.L.featureGroup();
         markersGroupRef.current = markersGroup;
 
         const activeCoords = [];
 
-        villages.forEach(v => {
-          if (!v.latitude || !v.longitude) return;
-          activeCoords.push([v.latitude, v.longitude]);
+        if (viewMode === 'districts') {
+          // Plot Aggregated Districts
+          filteredDistricts.forEach(d => {
+            if (!d.latitude || !d.longitude) return;
+            activeCoords.push([d.latitude, d.longitude]);
 
-          const isDeficient = getDeficiencyStatus(v);
-          const score = v.overall_score || 50;
+            const score = d.overall_score || 50;
+            const color = score >= 70 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
+            const radius = Math.max(10, Math.min(30, Math.sqrt(d.total_population || 50000) / 45));
 
-          // Color scheme: Red for deficient/hotspots, Green for high score, Yellow for medium
-          let markerColor = '#10b981'; // Green
-          if (isDeficient) {
-            markerColor = '#ef4444'; // Bright Red
-          } else if (score < 50) {
-            markerColor = '#f59e0b'; // Yellow/Orange
-          }
+            const marker = window.L.circleMarker([d.latitude, d.longitude], {
+              radius: radius,
+              fillColor: color,
+              color: '#ffffff',
+              weight: 1.5,
+              opacity: 0.9,
+              fillOpacity: 0.75
+            });
 
-          const marker = window.L.circleMarker([v.latitude, v.longitude], {
-            radius: isDeficient ? 10 : 7,
-            fillColor: markerColor,
-            color: isDeficient ? '#000000' : '#ffffff',
-            weight: isDeficient ? 2 : 1,
-            opacity: 1,
-            fillOpacity: 0.85
+            marker.bindPopup(`
+              <div style="font-family: sans-serif; color: #1e293b; min-width: 160px; padding: 4px;">
+                <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">${d.district} District</h4>
+                <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">State: ${d.state}</div>
+                <div style="font-size: 11px; margin-bottom: 4px; line-height: 1.4;">
+                  Avg score: <strong style="color: ${color}">${score.toFixed(1)}</strong><br/>
+                  Total Villages: <strong>${d.village_count}</strong><br/>
+                  Est. Population: <strong>${d.total_population?.toLocaleString()}</strong>
+                </div>
+                <button
+                  onclick="window.drillDownDistrict('${d.state}', '${d.district}');"
+                  style="display: inline-block; font-size: 10px; color: #6366f1; border: 1px solid rgba(99,102,241,0.4); padding: 4px 8px; border-radius: 4px; background: rgba(99,102,241,0.06); cursor: pointer; font-weight: 500; width: 100%; text-align: center; margin-top: 6px;"
+                >
+                  Drill Down into Villages &rarr;
+                </button>
+              </div>
+            `);
+
+            markersGroup.addLayer(marker);
           });
+        } else {
+          // Plot Individual Villages
+          villages.forEach(v => {
+            if (!v.latitude || !v.longitude) return;
+            activeCoords.push([v.latitude, v.longitude]);
 
-          // Bind Popup
-          marker.bindPopup(`
-            <div style="font-family: sans-serif; color: #1e293b; min-width: 140px;">
-              <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">${v.village_name}</h4>
-              <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${v.district}, ${v.state}</div>
-              <div style="font-size: 11px; margin-bottom: 4px;">
-                Score: <strong>${score.toFixed(1)}</strong> | Rank: <strong>#${v.overall_rank || '—'}</strong>
+            const isDeficient = getDeficiencyStatus(v);
+            const score = v.overall_score || 50;
+
+            let markerColor = '#10b981';
+            if (isDeficient) {
+              markerColor = '#ef4444';
+            } else if (score < 50) {
+              markerColor = '#f59e0b';
+            }
+
+            const marker = window.L.circleMarker([v.latitude, v.longitude], {
+              radius: isDeficient ? 10 : 7,
+              fillColor: markerColor,
+              color: isDeficient ? '#000000' : '#ffffff',
+              weight: isDeficient ? 2 : 1,
+              opacity: 1,
+              fillOpacity: 0.85
+            });
+
+            marker.bindPopup(`
+              <div style="font-family: sans-serif; color: #1e293b; min-width: 140px;">
+                <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">${v.village_name}</h4>
+                <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${v.district}, ${v.state}</div>
+                <div style="font-size: 11px; margin-bottom: 4px;">
+                  Score: <strong>${score.toFixed(1)}</strong> | Rank: <strong>#${v.overall_rank || '—'}</strong>
+                </div>
+                <div style="font-size: 10px; text-transform: uppercase; font-weight: bold; color: ${isDeficient ? '#ef4444' : '#64748b'}">
+                  ${isDeficient ? '⚠️ CRITICAL DEFICIT' : `Priority: ${v.priority_level}`}
+                </div>
               </div>
-              <div style="font-size: 10px; text-transform: uppercase; font-weight: bold; color: ${isDeficient ? '#ef4444' : '#64748b'}">
-                ${isDeficient ? '⚠️ CRITICAL DEFICIT' : `Priority: ${v.priority_level}`}
-              </div>
-            </div>
-          `);
+            `);
 
-          markersGroup.addLayer(marker);
+            markersGroup.addLayer(marker);
 
-          // If this is deficient, add a pulsing buffer circle around it
-          if (isDeficient) {
-            window.L.circle([v.latitude, v.longitude], {
-              radius: 400, // meters
-              color: '#ef4444',
-              fillColor: '#ef4444',
-              fillOpacity: 0.15,
-              weight: 1,
-              dashArray: '3, 5'
-            }).addTo(markersGroup);
-          }
-        });
+            if (isDeficient) {
+              window.L.circle([v.latitude, v.longitude], {
+                radius: 400,
+                color: '#ef4444',
+                fillColor: '#ef4444',
+                fillOpacity: 0.15,
+                weight: 1,
+                dashArray: '3, 5'
+              }).addTo(markersGroup);
+            }
+          });
+        }
 
         map.addLayer(markersGroup);
 
-        // Fit map view to plotted points
         if (activeCoords.length > 0) {
           map.fitBounds(activeCoords, { padding: [40, 40] });
         }
@@ -188,7 +254,7 @@ export default function SpatialAnalytics() {
 
       return () => clearTimeout(timer);
     }
-  }, [villages, getDeficiencyStatus]);
+  }, [viewMode, villages, filteredDistricts, getDeficiencyStatus]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -204,8 +270,6 @@ export default function SpatialAnalytics() {
     setSelectedVillage(v);
     if (leafletMapInstance.current && v.latitude && v.longitude) {
       leafletMapInstance.current.setView([v.latitude, v.longitude], 14);
-      
-      // Open popup automatically
       if (markersGroupRef.current) {
         const layers = markersGroupRef.current.getLayers();
         const matched = layers.find(l => {
@@ -219,10 +283,34 @@ export default function SpatialAnalytics() {
 
   return (
     <div className="dashboard animate-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)' }}>
-      <header className="dashboard-header" style={{ marginBottom: '16px' }}>
+      <header className="dashboard-header" style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 className="page-title">Advanced Spatial Analytics</h2>
           <p className="page-subtitle">Interactive regional mapping, clustering, and deficit hotspot analysis</p>
+        </div>
+        <div className="view-toggle" style={{ display: 'flex', background: 'var(--bg-secondary)', padding: '4px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+          <button
+            className={`btn ${viewMode === 'districts' ? 'btn--primary' : 'btn--ghost'}`}
+            onClick={() => setViewMode('districts')}
+            style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '4px' }}
+            id="view-districts-mode"
+          >
+            🏢 Districts View
+          </button>
+          <button
+            className={`btn ${viewMode === 'villages' ? 'btn--primary' : 'btn--ghost'}`}
+            onClick={() => {
+              if (!state || !district) {
+                alert("Please select a State and District first to view individual villages.");
+                return;
+              }
+              setViewMode('villages');
+            }}
+            style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '4px' }}
+            id="view-villages-mode"
+          >
+            📍 Villages View
+          </button>
         </div>
       </header>
 
@@ -231,7 +319,10 @@ export default function SpatialAnalytics() {
         <select
           className="filter-select"
           value={state}
-          onChange={e => setState(e.target.value)}
+          onChange={e => {
+            setState(e.target.value);
+            setDistrict('');
+          }}
           id="spatial-state-select"
         >
           <option value="">Select State</option>
@@ -254,7 +345,7 @@ export default function SpatialAnalytics() {
           style={{ flex: 1, minWidth: '240px' }}
           value={activeIndicator}
           onChange={e => setActiveIndicator(e.target.value)}
-          disabled={!district}
+          disabled={viewMode === 'districts'}
           id="spatial-indicator-select"
         >
           {INDICATORS.map(ind => <option key={ind.key} value={ind.key}>{ind.label}</option>)}
@@ -267,49 +358,74 @@ export default function SpatialAnalytics() {
         {/* Left side list of villages / hotspots */}
         <div className="glass-panel" style={{ width: '320px', display: 'flex', flexDirection: 'column', padding: '16px', minHeight: 0 }}>
           <h3 className="panel-title" style={{ fontSize: '14px', marginBottom: '4px' }}>
-            {activeIndicator === 'none' ? 'Villages Index List' : '⚠️ Identified Hotspots'}
+            {viewMode === 'districts' ? 'District Index list' : activeIndicator === 'none' ? 'Villages Index List' : '⚠️ Identified Hotspots'}
           </h3>
           <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '12px' }}>
-            {activeIndicator === 'none' ? `${villages.length} total mapped` : `${hotspots.length} critical hotspots found`}
+            {viewMode === 'districts' 
+              ? `${filteredDistricts.length} districts mapped` 
+              : activeIndicator === 'none' ? `${villages.length} total mapped` : `${hotspots.length} critical hotspots found`}
           </span>
 
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }} className="custom-scrollbar">
-            {(activeIndicator === 'none' ? villages : hotspots).map(v => (
-              <div
-                key={v.village_id}
-                onClick={() => handleVillageClick(v)}
-                style={{
-                  padding: '10px',
-                  borderRadius: '6px',
-                  background: selectedVillage?.village_id === v.village_id ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.01)',
-                  border: `1px solid ${selectedVillage?.village_id === v.village_id ? 'var(--accent)' : 'rgba(255,255,255,0.03)'}`,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-                className="spatial-list-item"
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <strong style={{ fontSize: '12px', color: '#fff' }}>{v.village_name}</strong>
-                  <span style={{ fontSize: '11px', color: getDeficiencyStatus(v) ? 'var(--danger)' : 'var(--accent)', fontWeight: 'bold' }}>
-                    {v.overall_score?.toFixed(1)}
-                  </span>
+            {viewMode === 'districts' ? (
+              filteredDistricts.map(d => (
+                <div
+                  key={`${d.state}-${d.district}`}
+                  onClick={() => window.drillDownDistrict(d.state, d.district)}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '6px',
+                    background: 'rgba(255,255,255,0.01)',
+                    border: '1px solid rgba(255,255,255,0.03)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  className="spatial-list-item"
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '12px', color: '#fff' }}>{d.district}</strong>
+                    <span style={{ fontSize: '11px', color: d.overall_score >= 50 ? 'var(--success)' : 'var(--danger)', fontWeight: 'bold' }}>
+                      {d.overall_score?.toFixed(1)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{d.state}</span>
+                    <span>{d.village_count} villages</span>
+                  </div>
                 </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>GP: {v.gram_panchayat || '—'}</span>
-                  <span>Rank: #{v.overall_rank || '—'}</span>
+              ))
+            ) : (
+              (activeIndicator === 'none' ? villages : hotspots).map(v => (
+                <div
+                  key={v.village_id}
+                  onClick={() => handleVillageClick(v)}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '6px',
+                    background: selectedVillage?.village_id === v.village_id ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.01)',
+                    border: `1px solid ${selectedVillage?.village_id === v.village_id ? 'var(--accent)' : 'rgba(255,255,255,0.03)'}`,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  className="spatial-list-item"
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: '12px', color: '#fff' }}>{v.village_name}</strong>
+                    <span style={{ fontSize: '11px', color: getDeficiencyStatus(v) ? 'var(--danger)' : 'var(--accent)', fontWeight: 'bold' }}>
+                      {v.overall_score?.toFixed(1)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>GP: {v.gram_panchayat || '—'}</span>
+                    <span>Rank: #{v.overall_rank || '—'}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
-
-            {state && district && (activeIndicator === 'none' ? villages : hotspots).length === 0 && (
-              <div style={{ padding: '40px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-                No records match this layout criteria.
-              </div>
+              ))
             )}
 
-            {!district && (
+            {viewMode === 'villages' && state && district && (activeIndicator === 'none' ? villages : hotspots).length === 0 && (
               <div style={{ padding: '40px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-                👈 Please select a State and District to load geospatial boundaries.
+                No records match this layout criteria.
               </div>
             )}
           </div>
@@ -330,15 +446,15 @@ export default function SpatialAnalytics() {
           <div style={{ padding: '8px 12px', background: 'rgba(15,22,41,0.9)', border: '1px solid var(--border)', borderRadius: '6px', display: 'flex', gap: '16px', fontSize: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ef4444' }} />
-              Deficient / Hotspot (Low performance in selected area)
+              Deficient / Hotspot / Critical (&lt; 50)
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} />
-              Developing (Overall Score &lt; 50)
+              Developing (Overall Score 50-69)
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
-              Sufficient (Overall Score &ge; 50)
+              Sufficient (Overall Score &ge; 70)
             </span>
           </div>
         </div>
