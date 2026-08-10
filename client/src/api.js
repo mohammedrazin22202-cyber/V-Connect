@@ -62,22 +62,6 @@ export async function fetchRegionalSimulation(params = {}) {
   return res.json();
 }
 
-export async function fetchDistrictAggregates() {
-  const response = await fetch(`${API_BASE}/stats/districts`);
-  if (!response.ok) throw new Error('Failed to fetch district stats');
-  return response.json();
-}
-
-export async function fetchCorrelationData(var1, var2) {
-  let url = `${API_BASE}/analytics/correlation`;
-  if (var1 && var2) {
-    url += `?var1=${var1}&var2=${var2}`;
-  }
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('Failed to fetch correlation stats');
-  return response.json();
-}
-
 export async function updateVillageBudget(payload = {}) {
   const res = await fetch(`${API_BASE}/admin/update-budget`, {
     method: 'POST',
