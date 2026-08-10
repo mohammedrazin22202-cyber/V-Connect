@@ -656,143 +656,252 @@ app.get("/api/admin/stats", (req, res) => {
 });
 
 // ── GET /api/stats/districts ───────────────────────────────────────────
+// Aggregates village-level metrics to district-level centroids
 app.get("/api/stats/districts", (req, res) => {
   try {
-    const districts = db.prepare(`
-      SELECT 
-        district, 
-        state, 
-        COUNT(*) as total_villages,
-        SUM(total_population) as total_population,
-        AVG(latitude) as latitude,
-        AVG(longitude) as longitude,
-        AVG(overall_score) as avg_score
-      FROM villages
-      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-      GROUP BY district, state
-      ORDER BY avg_score DESC
-    `).all();
-    res.json(districts);
+    const query = `
+      SELECT
+        v.state,
+        v.district,
+        AVG(v.latitude) as latitude,
+        AVG(v.longitude) as longitude,
+        AVG(d.overall_score) as overall_score,
+        AVG(d.economy_score) as economy_score,
+        AVG(d.education_score) as education_score,
+        AVG(d.health_score) as health_score,
+        AVG(d.infrastructure_score) as infrastructure_score,
+        AVG(d.environment_score) as environment_score,
+        AVG(d.governance_score) as governance_score,
+        AVG(d.social_score) as social_score,
+        SUM(v.total_population) as total_population,
+        COUNT(v.village_id) as village_count
+      FROM villages v
+      JOIN domain_scores d ON v.village_id = d.village_id
+      WHERE v.latitude IS NOT NULL AND v.longitude IS NOT NULL
+      GROUP BY v.state, v.district
+    `;
+    const rows = db.prepare(query).all();
+    res.json({ success: true, data: rows });
   } catch (err) {
-    console.error("Districts error:", err.message);
+    console.error("District aggregation stats error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── GET /api/analytics/correlation ────────────────────────────────────
+// ── GET /api/analytics/correlation ─────────────────────────────────────
+// Calculates Pearson correlation coefficient and returns sampled data points
 app.get("/api/analytics/correlation", (req, res) => {
-  const { var1, var2 } = req.query;
   try {
-    if (!var1 || !var2) {
-      const domains = [
-        'overall_score', 'education_score', 'health_score', 
-        'infrastructure_score', 'governance_score', 'economy_score', 
-        'demographics_score', 'environment_score'
-      ];
-      const matrix = {};
-      domains.forEach(d1 => {
-        matrix[d1] = {};
-        domains.forEach(d2 => {
-          if (d1 === d2) {
-            matrix[d1][d2] = 1.0;
-          } else {
-            const val = db.prepare(`
-              SELECT (
-                (COUNT(*) * SUM(v.${d1} * v.${d2}) - SUM(v.${d1}) * SUM(v.${d2})) /
-                (
-                  SQRT(COUNT(*) * SUM(v.${d1} * v.${d1}) - SUM(v.${d1}) * SUM(v.${d1})) *
-                  SQRT(COUNT(*) * SUM(v.${d2} * v.${d2}) - SUM(v.${d2}) * SUM(v.${d2}))
-                )
-              ) as r
-              FROM villages v
-            `).get().r;
-            matrix[d1][d2] = parseFloat(val?.toFixed(3)) || 0;
-          }
-        });
+    const { var1, var2 } = req.query;
+
+    const VALID_VARIABLES = [
+      "economy_score", "education_score", "health_score", "infrastructure_score",
+      "environment_score", "governance_score", "social_score", "overall_score",
+      "employment_rate", "avg_household_income", "poverty_rate", "crop_yield_index%",
+      "farmer_income_avg", "farmer_debt_index", "market_access_score", "bank_access_score",
+      "literacy_rate", "female_literacy_rate", "dropout_rate", "school_count",
+      "teacher_student_ratio", "digital_literacy_rate", "infant_mortality_rate",
+      "malnutrition_rate", "vaccination_coverage%", "medical_staff_per_1000",
+      "avg_healthcare_access_time_min", "healthcare_effectiveness_score",
+      "drinking_water_coverage_pct", "sanitation_coverage_pct", "road_quality_index",
+      "electricity_hours_per_day", "internet_penetration%", "nearest_hospital_distance_km",
+      "flood_risk_score", "earthquake_risk_score", "air_quality_index", "forest_cover_pct",
+      "disaster_preparedness_score", "climate_vulnerability_index", "panchayat_efficiency_score",
+      "transparency_index", "fund_utilization_pct", "scheme_coverage_pct",
+      "corruption_risk_proxy", "total_crime_rate", "crimes_against_women_rate",
+      "social_cohesion_index", "community_participation_score", "youth_engagement_score",
+      "total_population", "households", "population_density", "area_sq_km"
+    ];
+
+    if (var1 && var2) {
+      // Validate variables to prevent SQL injection
+      const v1 = var1.replace(/%/g, "\\%"); // normalize check
+      const cleanVar1 = VALID_VARIABLES.find(v => v.toLowerCase() === v1.toLowerCase());
+      const cleanVar2 = VALID_VARIABLES.find(v => v.toLowerCase() === var2.replace(/%/g, "\\%").toLowerCase());
+
+      if (!cleanVar1 || !cleanVar2) {
+        return res.status(400).json({ error: "Invalid variable selected for correlation" });
+      }
+
+      // SQLite escape column names in brackets
+      const col1 = cleanVar1.includes("_score") ? `d.[${cleanVar1}]` : `v.[${cleanVar1}]`;
+      const col2 = cleanVar2.includes("_score") ? `d.[${cleanVar2}]` : `v.[${cleanVar2}]`;
+
+      // Run Pearson correlation calculation directly in SQLite
+      const corrQuery = `
+        SELECT (
+          (COUNT(*) * SUM(${col1} * ${col2}) - SUM(${col1}) * SUM(${col2})) /
+          (
+            SQRT(
+              (COUNT(*) * SUM(${col1} * ${col1}) - SUM(${col1}) * SUM(${col1})) *
+              (COUNT(*) * SUM(${col2} * ${col2}) - SUM(${col2}) * SUM(${col2}))
+            )
+          )
+        ) as r
+        FROM villages v
+        JOIN domain_scores d ON v.village_id = d.village_id
+        WHERE ${col1} IS NOT NULL AND ${col2} IS NOT NULL
+      `;
+      const corrResult = db.prepare(corrQuery).get();
+
+      // Sample data points for UI scatter plot (e.g. 800 points)
+      const sampleQuery = `
+        SELECT v.village_name as name, v.district, v.state, ${col1} as x, ${col2} as y
+        FROM villages v
+        JOIN domain_scores d ON v.village_id = d.village_id
+        WHERE ${col1} IS NOT NULL AND ${col2} IS NOT NULL AND (v.village_id % 47 = 0)
+        LIMIT 800
+      `;
+      const samplePoints = db.prepare(sampleQuery).all();
+
+      return res.json({
+        success: true,
+        r: corrResult.r || 0,
+        data: samplePoints
       });
-      return res.json({ type: 'matrix', matrix });
     }
 
-    const stat = db.prepare(`
-      SELECT (
-        (COUNT(*) * SUM(v.${var1} * v.${var2}) - SUM(v.${var1}) * SUM(v.${var2})) /
-        (
-          SQRT(COUNT(*) * SUM(v.${var1} * v.${var1}) - SUM(v.${var1}) * SUM(v.${var1})) *
-          SQRT(COUNT(*) * SUM(v.${var2} * v.${var2}) - SUM(v.${var2}) * SUM(v.${var2}))
-        )
-      ) as r
-      FROM villages v
-    `).get();
+    // Default: compute the domain scores correlation matrix (8 x 8)
+    const domainKeys = [
+      "overall_score", "economy_score", "education_score", "health_score",
+      "infrastructure_score", "environment_score", "governance_score", "social_score"
+    ];
 
-    const points = db.prepare(`
-      SELECT 
-        v.village_id, 
-        v.village_name, 
-        v.${var1} as x, 
-        v.${var2} as y 
-      FROM villages v
-      WHERE (v.village_id % 47 = 0)
-      LIMIT 800
-    `).all();
+    const matrix = {};
+    for (const d1 of domainKeys) {
+      matrix[d1] = {};
+      for (const d2 of domainKeys) {
+        if (d1 === d2) {
+          matrix[d1][d2] = 1.0;
+        } else if (matrix[d2] && matrix[d2][d1] !== undefined) {
+          matrix[d1][d2] = matrix[d2][d1];
+        } else {
+          const col1 = `d.[${d1}]`;
+          const col2 = `d.[${d2}]`;
+          const rQuery = `
+            SELECT (
+              (COUNT(*) * SUM(${col1} * ${col2}) - SUM(${col1}) * SUM(${col2})) /
+              (
+                SQRT(
+                  (COUNT(*) * SUM(${col1} * ${col1}) - SUM(${col1}) * SUM(${col1})) *
+                  (COUNT(*) * SUM(${col2} * ${col2}) - SUM(${col2}) * SUM(${col2}))
+                )
+              )
+            ) as r
+            FROM domain_scores d
+            WHERE ${col1} IS NOT NULL AND ${col2} IS NOT NULL
+          `;
+          const rRes = db.prepare(rQuery).get();
+          matrix[d1][d2] = Number((rRes.r || 0).toFixed(3));
+        }
+      }
+    }
 
-    res.json({
-      type: 'bivariate',
-      r: parseFloat(stat.r?.toFixed(3)) || 0,
-      points
-    });
+    res.json({ success: true, matrix });
   } catch (err) {
-    console.error("Correlation error:", err.message);
+    console.error("Correlation stats error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── GET/POST /api/admin/run-pipeline ───────────────────────────────────
-let activeProcess = null;
-let pipelineLogsBuffer = [];
+// ── Background Python Script Subprocesses ──────────────────────────────
+const { spawn } = require("child_process");
+let activePipeline = null;
+let pipelineLogs = [];
+let pipelineType = "";
 
 app.post("/api/admin/run-pipeline", (req, res) => {
-  const { pipeline } = req.body;
-  if (activeProcess) {
-    return res.status(400).json({ error: "Pipeline already running" });
-  }
-
-  pipelineLogsBuffer = [`[VCONNECT SYSTEM] Spawn job for ${pipeline}...`];
-  const { spawn } = require("child_process");
-  
-  let script = "ingest.py";
-  let args = [];
-  
-  if (pipeline === "scraper") {
-    script = "village_profile.py";
-    args = ["--input", "mock_input.csv", "--headless"];
-  }
-
   try {
-    activeProcess = spawn("python", [script, ...args], {
-      cwd: __dirname,
+    const { pipeline, args = [] } = req.body;
+    
+    if (activePipeline) {
+      return res.status(400).json({ error: `Pipeline is already running: ${pipelineType}` });
+    }
+
+    pipelineLogs = [`[VCONNECT SYSTEM] Starting pipeline subprocess for ${pipeline}...`];
+    pipelineType = pipeline;
+
+    let scriptPath = "";
+    let runArgs = [];
+
+    if (pipeline === "scraper") {
+      scriptPath = path.join(path.dirname(__dirname), "village_profile.py");
+      // Check if arguments were passed
+      const inputPath = args.find(a => a.startsWith("-i")) || "-i";
+      const actualInput = inputPath.split(" ")[1] || path.join(path.dirname(__dirname), "Full Village names - No Duplicates.txt");
+      
+      runArgs = [scriptPath, "--input", actualInput, "--headless"];
+    } else if (pipeline === "ingest") {
+      scriptPath = path.join(__dirname, "ingest.py");
+      runArgs = [scriptPath];
+    } else {
+      return res.status(400).json({ error: "Invalid pipeline selected" });
+    }
+
+    pipelineLogs.push(`[EXEC] python ${runArgs.map(a => `"${a}"`).join(" ")}`);
+    
+    const pyProcess = spawn("python", runArgs, {
+      cwd: path.dirname(scriptPath),
       env: { ...process.env, PYTHONUNBUFFERED: "1" }
     });
 
-    activeProcess.stdout.on("data", (data) => {
-      const str = data.toString().trim();
-      if (str) pipelineLogsBuffer.push(`[STDOUT] ${str}`);
+    activePipeline = pyProcess;
+
+    pyProcess.stdout.on("data", (data) => {
+      const text = data.toString().trim();
+      if (text) {
+        text.split("\n").forEach(line => pipelineLogs.push(line));
+      }
     });
 
-    activeProcess.stderr.on("data", (data) => {
-      const str = data.toString().trim();
-      if (str) pipelineLogsBuffer.push(`[STDERR] ${str}`);
+    pyProcess.stderr.on("data", (data) => {
+      const text = data.toString().trim();
+      if (text) {
+        text.split("\n").forEach(line => pipelineLogs.push(`[STDERR] ${line}`));
+      }
     });
 
-    activeProcess.on("close", (code) => {
-      pipelineLogsBuffer.push(`[VCONNECT SYSTEM] Process exited with code ${code}`);
-      activeProcess = null;
+    pyProcess.on("close", (code) => {
+      pipelineLogs.push(`[VCONNECT SYSTEM] Process exited with code ${code}.`);
+      activePipeline = null;
     });
 
-    res.json({ success: true, message: `Pipeline ${pipeline} started.` });
+    res.json({ success: true, message: `Pipeline ${pipeline} started successfully.` });
   } catch (err) {
-    console.error("Pipeline spawn error:", err.message);
+    console.error("Run pipeline error:", err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+app.get("/api/admin/pipeline-logs", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  let logIndex = 0;
+
+  // Immediately send existing logs
+  while (logIndex < pipelineLogs.length) {
+    res.write(`data: ${JSON.stringify({ log: pipelineLogs[logIndex] })}\n\n`);
+    logIndex++;
+  }
+
+  const interval = setInterval(() => {
+    while (logIndex < pipelineLogs.length) {
+      res.write(`data: ${JSON.stringify({ log: pipelineLogs[logIndex] })}\n\n`);
+      logIndex++;
+    }
+
+    if (!activePipeline && logIndex >= pipelineLogs.length) {
+      res.write(`data: ${JSON.stringify({ status: "complete" })}\n\n`);
+      clearInterval(interval);
+      res.end();
+    }
+  }, 150);
+
+  req.on("close", () => {
+    clearInterval(interval);
+  });
 });
 
 // ── Start Server ───────────────────────────────────────────────────────
@@ -804,4 +913,7 @@ app.listen(PORT, () => {
   console.log(`   GET /api/stats`);
   console.log(`   GET /api/filters`);
   console.log(`   GET /api/compare/states`);
+  console.log(`   GET /api/stats/districts`);
+  console.log(`   GET /api/analytics/correlation`);
 });
+
