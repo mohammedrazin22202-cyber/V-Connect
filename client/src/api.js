@@ -62,22 +62,6 @@ export async function fetchRegionalSimulation(params = {}) {
   return res.json();
 }
 
-export async function fetchDistrictAggregates() {
-  const response = await fetch(`${API_BASE}/stats/districts`);
-  if (!response.ok) throw new Error('Failed to fetch district stats');
-  return response.json();
-}
-
-export async function fetchCorrelationData(var1, var2) {
-  let url = `${API_BASE}/analytics/correlation`;
-  if (var1 && var2) {
-    url += `?var1=${var1}&var2=${var2}`;
-  }
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('Failed to fetch correlation stats');
-  return response.json();
-}
-
 export async function updateVillageBudget(payload = {}) {
   const res = await fetch(`${API_BASE}/admin/update-budget`, {
     method: 'POST',
@@ -91,3 +75,53 @@ export async function fetchAdminStats() {
   const res = await fetch(`${API_BASE}/admin/stats`);
   return res.json();
 }
+
+export async function fetchDistrictAggregates() {
+  const res = await fetch(`${API_BASE}/stats/districts`);
+  return res.json();
+}
+
+export async function fetchCorrelationData(var1 = '', var2 = '') {
+  const query = (var1 && var2) ? `?var1=${encodeURIComponent(var1)}&var2=${encodeURIComponent(var2)}` : '';
+  const res = await fetch(`${API_BASE}/analytics/correlation${query}`);
+  return res.json();
+}
+
+export async function triggerPipelineRun(pipeline, args = []) {
+  const res = await fetch(`${API_BASE}/admin/run-pipeline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pipeline, args }),
+  });
+  return res.json();
+}
+
+export function streamPipelineLogs(onLog, onStatus) {
+  const eventSource = new EventSource(`${API_BASE}/admin/pipeline-logs`);
+  
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.log) {
+        onLog(data.log);
+      }
+      if (data.status) {
+        onStatus(data.status);
+        if (data.status === 'complete') {
+          eventSource.close();
+        }
+      }
+    } catch (err) {
+      console.error('Error parsing event source message:', err);
+    }
+  };
+
+  eventSource.onerror = (err) => {
+    console.error('EventSource connection failed:', err);
+    eventSource.close();
+    onStatus('error');
+  };
+
+  return () => eventSource.close();
+}
+
