@@ -6,6 +6,7 @@ import StateComparison from './pages/StateComparison';
 import VillageComparison from './pages/VillageComparison';
 import PolicySandbox from './pages/PolicySandbox';
 import SpatialAnalytics from './pages/SpatialAnalytics';
+import PredictiveSandbox from './pages/PredictiveSandbox';
 import ReportBuilder from './pages/ReportBuilder';
 import AdminPortal from './pages/AdminPortal';
 import Sidebar from './components/Sidebar';
@@ -43,6 +44,7 @@ function App() {
             <Route path="/compare-villages" element={<VillageComparison />} />
             <Route path="/sandbox" element={<PolicySandbox />} />
             <Route path="/analytics" element={<SpatialAnalytics />} />
+            <Route path="/predictive" element={<PredictiveSandbox />} />
             <Route path="/reports" element={<ReportBuilder />} />
             <Route path="/admin" element={<AdminPortal />} />
           </Routes>
