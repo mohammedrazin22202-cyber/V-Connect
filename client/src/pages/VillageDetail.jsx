@@ -88,7 +88,11 @@ function formatMetricName(name) {
 }
 
 const PROJECTS = [
-  { id: 'water_grid', name: '💧 Household Tap Water Grid', cost: 1200000, desc: 'Installs direct piped clean water taps across GP.', metrics: { drinking_water_coverage_pct: 98.0 } }
+  { id: 'water_grid', name: '💧 Household Tap Water Grid', cost: 1200000, desc: 'Installs direct piped clean water taps across GP.', metrics: { drinking_water_coverage_pct: 98.0 } },
+  { id: 'latrines', name: '🚽 Sanitation Latrines Drive', cost: 750000, desc: 'Constructs latrines to eliminate open defecation.', metrics: { sanitation_coverage_pct: 95.0 } },
+  { id: 'smart_class', name: '🏫 Smart Classrooms & Computer Lab', cost: 1500000, desc: 'Equips schools with digital nodes and reduces dropouts.', metrics: { digital_literacy_rate: 90.0, dropout_rate: 1.5 } },
+  { id: 'solar_mini', name: '🔌 Solar Micro-Grid & Connectivity', cost: 2800000, desc: 'Generates 24/7 solar microgrid and internet power.', metrics: { electricity_hours_per_day: 24.0, "internet_penetration%": 90.0 } },
+  { id: 'health_clinic', name: '🏥 Local Health Sub-Center clinic', cost: 3200000, desc: 'Provides medical personnel and reduces access time.', metrics: { malnutrition_rate: 4.5, avg_healthcare_access_time_min: 15.0 } }
 ];
 
 export default function VillageDetail() {
@@ -106,6 +110,7 @@ export default function VillageDetail() {
   const [simulatingRank, setSimulatingRank] = useState(false);
   const [customBudget, setCustomBudget] = useState('');
   const [activePreset, setActivePreset] = useState(null);
+  const [checkedProjects, setCheckedProjects] = useState([]);
 
   // Apply pre-configured simulation presets to evaluate specific development campaign outcomes
   const applyPreset = (presetType) => {
@@ -134,6 +139,48 @@ export default function VillageDetail() {
     setSimulatedMetrics(updated);
     setActivePreset(presetType);
   };
+
+  const handleToggleProject = (projId) => {
+    let newChecked = [...checkedProjects];
+    if (newChecked.includes(projId)) {
+      newChecked = newChecked.filter(id => id !== projId);
+    } else {
+      newChecked.push(projId);
+    }
+    setCheckedProjects(newChecked);
+
+    // Recalculate metrics based on checked projects
+    const baseMetrics = {};
+    Object.values(metrics).forEach(items => {
+      items.forEach(item => {
+        baseMetrics[item.name] = item.value;
+      });
+    });
+
+    newChecked.forEach(id => {
+      const project = PROJECTS.find(p => p.id === id);
+      if (project) {
+        Object.entries(project.metrics).forEach(([mName, mVal]) => {
+          const currentVal = baseMetrics[mName] || 0;
+          if (mName === 'dropout_rate' || mName === 'malnutrition_rate' || mName === 'avg_healthcare_access_time_min') {
+            baseMetrics[mName] = Math.min(currentVal, mVal);
+          } else {
+            baseMetrics[mName] = Math.max(currentVal, mVal);
+          }
+        });
+      }
+    });
+
+    setSimulatedMetrics(baseMetrics);
+    setActivePreset(null);
+  };
+
+  const totalProjectCost = useMemo(() => {
+    return checkedProjects.reduce((sum, id) => {
+      const p = PROJECTS.find(proj => proj.id === id);
+      return sum + (p ? p.cost : 0);
+    }, 0);
+  }, [checkedProjects]);
 
   const optimizeBudgetAllocation = (totalBudget) => {
     if (!village || !totalBudget || totalBudget <= 0) return;
@@ -632,34 +679,87 @@ export default function VillageDetail() {
         {/* Campaign Presets and Smart Budget Optimizer panel */}
         <div style={{ marginBottom: '24px', background: 'rgba(255,255,255,0.01)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }} className="no-print">
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-            {/* Presets */}
-            <div style={{ flex: '2 1 400px' }}>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Quick-Apply Intervention Presets</h4>
-              <div className="preset-grid">
-                <button 
-                  className={`preset-btn ${activePreset === 'water_sanitation' ? 'preset-btn--active' : ''}`}
-                  onClick={() => applyPreset('water_sanitation')}
-                >
-                  💧 Clean Water & Sanitation
-                </button>
-                <button 
-                  className={`preset-btn ${activePreset === 'digital_edu' ? 'preset-btn--active' : ''}`}
-                  onClick={() => applyPreset('digital_edu')}
-                >
-                  💻 Digital Village Push
-                </button>
-                <button 
-                  className={`preset-btn ${activePreset === 'healthcare' ? 'preset-btn--active' : ''}`}
-                  onClick={() => applyPreset('healthcare')}
-                >
-                  🏥 Primary Health Drive
-                </button>
-                <button 
-                  className={`preset-btn ${activePreset === 'economic' ? 'preset-btn--active' : ''}`}
-                  onClick={() => applyPreset('economic')}
-                >
-                  🌾 Economy & Poverty Relief
-                </button>
+            {/* Presets and Projects Checklist */}
+            <div style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Quick-Apply Intervention Presets</h4>
+                <div className="preset-grid">
+                  <button 
+                    className={`preset-btn ${activePreset === 'water_sanitation' ? 'preset-btn--active' : ''}`}
+                    onClick={() => {
+                      applyPreset('water_sanitation');
+                      setCheckedProjects([]);
+                    }}
+                  >
+                    💧 Clean Water & Sanitation
+                  </button>
+                  <button 
+                    className={`preset-btn ${activePreset === 'digital_edu' ? 'preset-btn--active' : ''}`}
+                    onClick={() => {
+                      applyPreset('digital_edu');
+                      setCheckedProjects([]);
+                    }}
+                  >
+                    💻 Digital Village Push
+                  </button>
+                  <button 
+                    className={`preset-btn ${activePreset === 'healthcare' ? 'preset-btn--active' : ''}`}
+                    onClick={() => {
+                      applyPreset('healthcare');
+                      setCheckedProjects([]);
+                    }}
+                  >
+                    🏥 Primary Health Drive
+                  </button>
+                  <button 
+                    className={`preset-btn ${activePreset === 'economic' ? 'preset-btn--active' : ''}`}
+                    onClick={() => {
+                      applyPreset('economic');
+                      setCheckedProjects([]);
+                    }}
+                  >
+                    🌾 Economy & Poverty Relief
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <h4 style={{ margin: '10px 0 10px 0', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Target local Infrastructure Projects</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {PROJECTS.map(proj => {
+                    const isChecked = checkedProjects.includes(proj.id);
+                    return (
+                      <label 
+                        key={proj.id} 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'flex-start', 
+                          gap: '10px', 
+                          background: isChecked ? 'rgba(99,102,241,0.06)' : 'rgba(255,255,255,0.02)', 
+                          border: `1px solid ${isChecked ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.04)'}`, 
+                          padding: '10px', 
+                          borderRadius: '6px', 
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked}
+                          onChange={() => handleToggleProject(proj.id)}
+                          style={{ marginTop: '3px', cursor: 'pointer' }}
+                        />
+                        <div style={{ fontSize: '12px', flex: 1 }}>
+                          <div style={{ fontWeight: 'bold', color: isChecked ? '#fff' : 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                            <span>{proj.name}</span>
+                            <span style={{ color: 'var(--accent)', fontWeight: '800' }}>₹{Math.round(proj.cost / 100000) / 10}L</span>
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px' }}>{proj.desc}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -681,6 +781,7 @@ export default function VillageDetail() {
                   onClick={() => {
                     const b = customBudget ? parseInt(customBudget) : (village.recommended_budget_inr || 1500000);
                     optimizeBudgetAllocation(b);
+                    setCheckedProjects([]);
                   }}
                   id="optimizer-run-btn"
                   style={{ fontSize: '12px', whiteSpace: 'nowrap' }}
@@ -719,6 +820,7 @@ export default function VillageDetail() {
                       const v = parseFloat(e.target.value);
                       setSimulatedMetrics(prev => ({ ...prev, [cfg.col]: v }));
                       setActivePreset(null);
+                      setCheckedProjects([]);
                     }}
                     style={{ width: '100%', accentColor: color, cursor: 'pointer', height: '5px' }}
                   />
@@ -741,13 +843,13 @@ export default function VillageDetail() {
               <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>
                 Simulated Impact
               </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
                 <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Simulated Score</div>
-                  <div style={{ fontSize: '24px', fontWeight: '800', color: '#06b6d4', margin: '4px 0' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Simulated Score</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: '#06b6d4', margin: '4px 0' }}>
                     {simulatedOverallScore.toFixed(1)}
                   </div>
-                  <div style={{ fontSize: '10px' }}>
+                  <div style={{ fontSize: '9px' }}>
                     {overallScoreDiff > 0 ? (
                       <span style={{ color: 'var(--success)' }}>+{overallScoreDiff.toFixed(1)} gain</span>
                     ) : overallScoreDiff < 0 ? (
@@ -758,19 +860,28 @@ export default function VillageDetail() {
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Estimated Rank</div>
-                  <div style={{ fontSize: '24px', fontWeight: '800', color: '#06b6d4', margin: '4px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Estimated Rank</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: '#06b6d4', margin: '4px 0', display: 'flex', alignItems: 'center', gap: '3px' }}>
                     #{simulatedRank?.toLocaleString()}
-                    {simulatingRank && <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>...</span>}
+                    {simulatingRank && <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>...</span>}
                   </div>
-                  <div style={{ fontSize: '10px' }}>
+                  <div style={{ fontSize: '9px' }}>
                     {overallRankDiff > 0 ? (
-                      <span style={{ color: 'var(--success)' }}>▲ Improved by {overallRankDiff.toLocaleString()}</span>
+                      <span style={{ color: 'var(--success)' }}>▲ +{overallRankDiff.toLocaleString()}</span>
                     ) : overallRankDiff < 0 ? (
-                      <span style={{ color: 'var(--danger)' }}>▼ Slipped by {Math.abs(overallRankDiff).toLocaleString()}</span>
+                      <span style={{ color: 'var(--danger)' }}>▼ {overallRankDiff.toLocaleString()}</span>
                     ) : (
                       <span style={{ color: 'var(--text-muted)' }}>No change</span>
                     )}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Project Budget</div>
+                  <div style={{ fontSize: '16px', fontWeight: '800', color: '#f59e0b', margin: '4px 0' }}>
+                    ₹{checkedProjects.length > 0 ? `${Math.round(totalProjectCost / 100000) / 10}L` : '—'}
+                  </div>
+                  <div style={{ fontSize: '9px', color: 'var(--text-secondary)' }}>
+                    {checkedProjects.length} active
                   </div>
                 </div>
               </div>
@@ -785,6 +896,7 @@ export default function VillageDetail() {
                   });
                   setSimulatedMetrics(initial);
                   setSimulatedRank(village.overall_rank);
+                  setCheckedProjects([]);
                 }}
                 style={{ width: '100%', fontSize: '11px', padding: '6px' }}
               >
