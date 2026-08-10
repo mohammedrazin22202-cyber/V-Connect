@@ -59,3 +59,5 @@ export default function Sidebar({ isOpen, onClose }) {
     </aside>
   );
 }
+
+// Registered route path for predictive analytics sandbox
