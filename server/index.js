@@ -704,8 +704,181 @@ app.post("/api/admin/update-budget", (req, res) => {
     rebuildDashboardStats(); // update cache
 
     res.json({ success: true, message: `Village ${village_id} updated successfully.` });
+});
+
+// ── POST /api/admin/ingest-csv ─────────────────────────────────────────
+// Parses and ingests raw CSV values into the SQLite database, recomputes rankings and statistics
+app.post("/api/admin/ingest-csv", (req, res) => {
+  try {
+    const { csvContent } = req.body;
+    if (!csvContent) {
+      return res.status(400).json({ error: "Missing csvContent" });
+    }
+
+    const lines = csvContent.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) {
+      return res.status(400).json({ error: "CSV must contain headers and at least one data row" });
+    }
+
+    const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+    if (headers[0] !== 'village_id') {
+      return res.status(400).json({ error: "CSV headers must start with 'village_id'" });
+    }
+
+    const VALID_METRICS = [
+      "employment_rate", "avg_household_income", "poverty_rate", "crop_yield_index%",
+      "farmer_income_avg", "farmer_debt_index", "market_access_score", "bank_access_score",
+      "literacy_rate", "female_literacy_rate", "dropout_rate", "school_count",
+      "teacher_student_ratio", "digital_literacy_rate", "infant_mortality_rate",
+      "malnutrition_rate", "vaccination_coverage%", "medical_staff_per_1000",
+      "avg_healthcare_access_time_min", "healthcare_effectiveness_score",
+      "drinking_water_coverage_pct", "sanitation_coverage_pct", "road_quality_index",
+      "electricity_hours_per_day", "internet_penetration%", "nearest_hospital_distance_km",
+      "flood_risk_score", "earthquake_risk_score", "air_quality_index", "forest_cover_pct",
+      "disaster_preparedness_score", "climate_vulnerability_index", "panchayat_efficiency_score",
+      "transparency_index", "fund_utilization_pct", "scheme_coverage_pct",
+      "corruption_risk_proxy", "total_crime_rate", "crimes_against_women_rate",
+      "social_cohesion_index", "community_participation_score", "youth_engagement_score",
+      "recommended_budget_inr", "priority_level"
+    ];
+
+    const invalidHeaders = headers.slice(1).filter(h => !VALID_METRICS.includes(h));
+    if (invalidHeaders.length > 0) {
+      return res.status(400).json({ error: `Invalid columns: [${invalidHeaders.join(', ')}]` });
+    }
+
+    const updates = [];
+    for (let i = 1; i < lines.length; i++) {
+      const row = lines[i].split(',').map(v => v.trim());
+      if (row.length !== headers.length) {
+        return res.status(400).json({ error: `Row ${i + 1} has column count mismatch (expected ${headers.length}, got ${row.length})` });
+      }
+
+      const villageId = parseInt(row[0], 10);
+      if (isNaN(villageId)) {
+        return res.status(400).json({ error: `Row ${i + 1} has invalid village_id: "${row[0]}"` });
+      }
+
+      const rowData = {};
+      for (let j = 1; j < row.length; j++) {
+        const header = headers[j];
+        if (header === 'priority_level') {
+          rowData[header] = row[j];
+        } else {
+          const val = parseFloat(row[j]);
+          if (isNaN(val)) {
+            return res.status(400).json({ error: `Row ${i + 1} has invalid value for ${headers[j]}: "${row[j]}"` });
+          }
+          rowData[header] = val;
+        }
+      }
+      updates.push({ villageId, data: rowData });
+    }
+
+    const METRIC_MAP_COLS = {
+      "Economy": ["employment_rate", "avg_household_income", "poverty_rate",
+                   "crop_yield_index%", "farmer_income_avg", "farmer_debt_index",
+                   "market_access_score", "bank_access_score"],
+      "Education": ["literacy_rate", "female_literacy_rate", "dropout_rate",
+                     "school_count", "teacher_student_ratio", "digital_literacy_rate"],
+      "Health": ["infant_mortality_rate", "malnutrition_rate", "vaccination_coverage%",
+                 "medical_staff_per_1000", "avg_healthcare_access_time_min",
+                 "healthcare_effectiveness_score"],
+      "Infrastructure": ["drinking_water_coverage_pct", "sanitation_coverage_pct",
+                         "road_quality_index", "electricity_hours_per_day",
+                         "internet_penetration%", "nearest_hospital_distance_km"],
+      "Environment": ["flood_risk_score", "earthquake_risk_score", "air_quality_index",
+                       "forest_cover_pct", "disaster_preparedness_score",
+                       "climate_vulnerability_index"],
+      "Governance": ["panchayat_efficiency_score", "transparency_index",
+                     "fund_utilization_pct", "scheme_coverage_pct",
+                     "corruption_risk_proxy"],
+      "Social": ["total_crime_rate", "crimes_against_women_rate",
+                 "social_cohesion_index", "community_participation_score",
+                 "youth_engagement_score"]
+    };
+
+    const NEGATIVE_METRICS_LIST = [
+      "poverty_rate", "farmer_debt_index", "dropout_rate", "infant_mortality_rate", 
+      "malnutrition_rate", "avg_healthcare_access_time_min", "flood_risk_score", 
+      "earthquake_risk_score", "climate_vulnerability_index", "corruption_risk_proxy", 
+      "total_crime_rate", "crimes_against_women_rate", "nearest_hospital_distance_km",
+      "air_quality_index"
+    ];
+
+    const runTransaction = db.transaction((updatesList) => {
+      updatesList.forEach(({ villageId, data }) => {
+        const cols = Object.keys(data);
+        if (cols.length === 0) return;
+
+        const setClause = cols.map(c => `[${c}] = ?`).join(', ');
+        const vals = cols.map(c => data[c]);
+
+        db.prepare(`UPDATE villages SET ${setClause} WHERE village_id = ?`).run(...vals, villageId);
+
+        // Fetch full updated village row
+        const village = db.prepare("SELECT * FROM villages WHERE village_id = ?").get(villageId);
+        if (!village) return;
+
+        // Recalculate domain scores
+        const simScores = {};
+        Object.entries(METRIC_MAP_COLS).forEach(([category, mCols]) => {
+          const domain = category.toLowerCase();
+          let sum = 0;
+          let count = 0;
+          mCols.forEach(col => {
+            const val = village[col];
+            if (val !== undefined && val !== null) {
+              const isNegative = NEGATIVE_METRICS_LIST.includes(col);
+              const colMeta = metricMeta[col];
+              if (colMeta) {
+                const { min, max } = colMeta;
+                let norm = min === max ? 50.0 : ((val - min) / (max - min)) * 100;
+                norm = Math.min(100, Math.max(0, norm));
+                sum += isNegative ? (100 - norm) : norm;
+                count++;
+              }
+            }
+          });
+          simScores[domain] = count > 0 ? sum / count : 50.0;
+        });
+
+        const overallScore = (simScores.economy + simScores.education + simScores.health + 
+                              simScores.infrastructure + simScores.environment + simScores.governance + 
+                              simScores.social) / 7;
+
+        db.prepare(`
+          UPDATE domain_scores
+          SET economy_score = ?, education_score = ?, health_score = ?, 
+              infrastructure_score = ?, environment_score = ?, governance_score = ?, 
+              social_score = ?, overall_score = ?
+          WHERE village_id = ?
+        `).run(
+          simScores.economy, simScores.education, simScores.health,
+          simScores.infrastructure, simScores.environment, simScores.governance,
+          simScores.social, overallScore, villageId
+        );
+      });
+
+      // Recompute all ranks
+      db.prepare(`
+        WITH Ranked AS (
+          SELECT village_id, RANK() OVER (ORDER BY overall_score DESC) as new_rank
+          FROM domain_scores
+        )
+        UPDATE domain_scores
+        SET overall_rank = (SELECT new_rank FROM Ranked WHERE Ranked.village_id = domain_scores.village_id)
+      `).run();
+
+      // Invalidate stats cache
+      rebuildDashboardStats();
+    });
+
+    runTransaction(updates);
+
+    res.json({ success: true, message: `Successfully updated ${updates.length} village records. Scores & overall ranks recomputed.` });
   } catch (err) {
-    console.error("Admin update budget error:", err.message);
+    console.error("CSV Ingestion Error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
