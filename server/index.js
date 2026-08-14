@@ -601,6 +601,85 @@ app.get("/api/simulation/region", (req, res) => {
   }
 });
 
+// ── Helper: rebuild dashboard stats cache ──────────────────────────────
+function rebuildDashboardStats() {
+  const totalVillages = db.prepare("SELECT COUNT(*) as count FROM villages").get().count;
+  const totalStates = db.prepare("SELECT COUNT(DISTINCT state) as count FROM villages").get().count;
+  const totalDistricts = db.prepare("SELECT COUNT(DISTINCT district) as count FROM villages").get().count;
+  
+  const priorityBreakdown = db.prepare("SELECT priority_level, COUNT(*) as count FROM villages WHERE priority_level IS NOT NULL GROUP BY priority_level").all();
+  
+  const avgScores = db.prepare(`
+    SELECT 
+      AVG(economy_score) as economy,
+      AVG(education_score) as education,
+      AVG(health_score) as health,
+      AVG(infrastructure_score) as infrastructure,
+      AVG(environment_score) as environment,
+      AVG(governance_score) as governance,
+      AVG(social_score) as social,
+      AVG(overall_score) as overall
+    FROM domain_scores
+  `).get();
+  
+  for (const k in avgScores) {
+    avgScores[k] = Number((avgScores[k] || 50.0).toFixed(2));
+  }
+  
+  const stateComparison = db.prepare(`
+    SELECT
+      v.state,
+      COUNT(v.village_id) as village_count,
+      ROUND(AVG(d.economy_score), 2) as economy_score,
+      ROUND(AVG(d.education_score), 2) as education_score,
+      ROUND(AVG(d.health_score), 2) as health_score,
+      ROUND(AVG(d.infrastructure_score), 2) as infrastructure_score,
+      ROUND(AVG(d.environment_score), 2) as environment_score,
+      ROUND(AVG(d.governance_score), 2) as governance_score,
+      ROUND(AVG(d.social_score), 2) as social_score,
+      ROUND(AVG(d.overall_score), 2) as overall_score
+    FROM villages v
+    JOIN domain_scores d ON v.village_id = d.village_id
+    GROUP BY v.state
+    ORDER BY overall_score DESC
+  `).all();
+  
+  const topStates = stateComparison.slice(0, 10);
+  const bottomStates = stateComparison.slice(-10);
+  
+  const summaryStats = {
+    totalVillages,
+    totalStates,
+    totalDistricts,
+    priorityBreakdown,
+    avgScores,
+    topStates,
+    bottomStates
+  };
+  
+  const states = db.prepare("SELECT DISTINCT state FROM villages WHERE state IS NOT NULL ORDER BY state").all().map(r => r.state);
+  const priorities = db.prepare("SELECT DISTINCT priority_level FROM villages WHERE priority_level IS NOT NULL ORDER BY priority_level").all().map(r => r.priority_level);
+  
+  const stateDistricts = {};
+  const distRows = db.prepare("SELECT DISTINCT state, district FROM villages WHERE state IS NOT NULL AND district IS NOT NULL ORDER BY state, district").all();
+  distRows.forEach(r => {
+    if (!stateDistricts[r.state]) {
+      stateDistricts[r.state] = [];
+    }
+    stateDistricts[r.state].push(r.district);
+  });
+  
+  const filtersData = {
+    states,
+    priorities,
+    state_districts: stateDistricts
+  };
+  
+  db.prepare("INSERT OR REPLACE INTO dashboard_stats (stat_key, stat_value) VALUES ('summary', ?)").run(JSON.stringify(summaryStats));
+  db.prepare("INSERT OR REPLACE INTO dashboard_stats (stat_key, stat_value) VALUES ('state_comparison', ?)").run(JSON.stringify(stateComparison));
+  db.prepare("INSERT OR REPLACE INTO dashboard_stats (stat_key, stat_value) VALUES ('filters', ?)").run(JSON.stringify(filtersData));
+}
+
 // ── POST /api/admin/update-budget ──────────────────────────────────────
 // Updates recommended budget & priority level for a village in the database
 app.post("/api/admin/update-budget", (req, res) => {
