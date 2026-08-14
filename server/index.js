@@ -714,10 +714,8 @@ app.get("/api/analytics/correlation", (req, res) => {
     ];
 
     if (var1 && var2) {
-      // Validate variables to prevent SQL injection
-      const v1 = var1.replace(/%/g, "\\%"); // normalize check
-      const cleanVar1 = VALID_VARIABLES.find(v => v.toLowerCase() === v1.toLowerCase());
-      const cleanVar2 = VALID_VARIABLES.find(v => v.toLowerCase() === var2.replace(/%/g, "\\%").toLowerCase());
+      const cleanVar1 = VALID_VARIABLES.find(v => v.toLowerCase() === var1.toLowerCase());
+      const cleanVar2 = VALID_VARIABLES.find(v => v.toLowerCase() === var2.toLowerCase());
 
       if (!cleanVar1 || !cleanVar2) {
         return res.status(400).json({ error: "Invalid variable selected for correlation" });
