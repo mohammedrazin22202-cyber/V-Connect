@@ -5,6 +5,8 @@ server/vconnect.db
 *.xlsx
 *.txt
 *.db
+*-wal
+*-shm
 
 # Node dependencies
 node_modules/
