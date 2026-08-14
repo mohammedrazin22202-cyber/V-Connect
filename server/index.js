@@ -793,8 +793,13 @@ app.post("/api/admin/update-budget", (req, res) => {
     }
 
     rebuildDashboardStats(); // update cache
+    invalidateApiCache();
 
     res.json({ success: true, message: `Village ${village_id} updated successfully.` });
+  } catch (err) {
+    console.error("Admin update budget error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── POST /api/admin/ingest-csv ─────────────────────────────────────────
