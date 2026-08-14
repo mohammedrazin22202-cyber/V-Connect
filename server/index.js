@@ -72,6 +72,12 @@ function safeInt(val, fallback) {
 // Paginated, sortable, filterable village rankings
 app.get("/api/rankings", (req, res) => {
   try {
+    const cacheKey = req.originalUrl;
+    const cached = getCachedResponse(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const page = Math.max(1, safeInt(req.query.page, 1));
     const limit = Math.min(100, Math.max(1, safeInt(req.query.limit, 25)));
     const offset = (page - 1) * limit;
@@ -194,7 +200,7 @@ app.get("/api/rankings", (req, res) => {
       });
     }
 
-    res.json({
+    const resultObj = {
       data: rows,
       pagination: {
         page,
@@ -202,7 +208,9 @@ app.get("/api/rankings", (req, res) => {
         total,
         totalPages: Math.ceil(total / limit),
       },
-    });
+    };
+    setCachedResponse(cacheKey, resultObj);
+    res.json(resultObj);
   } catch (err) {
     console.error("Rankings error:", err.message);
     res.status(500).json({ error: err.message });
