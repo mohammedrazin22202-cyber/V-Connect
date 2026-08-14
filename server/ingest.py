@@ -177,7 +177,7 @@ def compute_domain_score(df, domain):
     if not parts:
         return pd.Series(50.0, index=df.index)
     stacked = pd.concat(parts, axis=1)
-    return stacked.mean(axis=1).round(2)
+    return stacked.mean(axis=1).fillna(50.0).round(2)
 
 
 def main():
