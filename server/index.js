@@ -26,7 +26,8 @@ try {
   db.pragma("cache_size = -128000"); // 128MB cache
   db.pragma("temp_store = MEMORY");
   db.pragma("mmap_size = 268435456"); // 256MB mmap
-  console.log("✓ Connected to SQLite database (read-write)");
+  db.pragma("journal_mode = WAL");
+  console.log("✓ Connected to SQLite database (read-write, WAL enabled)");
 } catch (err) {
   console.error("✗ Failed to open database:", err.message);
   console.error("  Run 'python ingest.py' first to create the database.");
