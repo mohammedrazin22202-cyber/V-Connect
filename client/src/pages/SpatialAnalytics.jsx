@@ -98,16 +98,17 @@ export default function SpatialAnalytics() {
   const getDeficiencyStatus = useCallback((v) => {
     if (activeIndicator === 'none') return false;
     if (activeIndicator === 'water_sanitation') {
-      return (v.infrastructure_score || 50) < 50;
+      return (v.drinking_water_coverage_pct !== null && v.drinking_water_coverage_pct < 50) || 
+             (v.sanitation_coverage_pct !== null && v.sanitation_coverage_pct < 50);
     }
     if (activeIndicator === 'healthcare_distance') {
-      return (v.health_score || 50) < 45;
+      return v.nearest_hospital_distance_km !== null && v.nearest_hospital_distance_km > 15;
     }
     if (activeIndicator === 'education_dropout') {
-      return (v.education_score || 50) < 45;
+      return v.dropout_rate !== null && v.dropout_rate > 15;
     }
     if (activeIndicator === 'economic_poverty') {
-      return (v.economy_score || 50) < 40;
+      return v.poverty_rate !== null && v.poverty_rate > 40;
     }
     return false;
   }, [activeIndicator]);
