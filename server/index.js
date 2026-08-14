@@ -437,8 +437,46 @@ app.get("/api/simulation/region", (req, res) => {
     });
 
     // Fetch all raw metrics for matching villages in one SQL query
-    const colsToFetch = ["village_id", "avg_household_income", "poverty_rate", "dropout_rate", "digital_literacy_rate", "malnutrition_rate", "avg_healthcare_access_time_min", "drinking_water_coverage_pct", "sanitation_coverage_pct", "electricity_hours_per_day", "[internet_penetration%]"];
-    const rawData = db.prepare(`SELECT ${colsToFetch.map(c => `v.${c}`).join(", ")} FROM villages v WHERE v.state = ? AND v.district = ?`).all(state, district);
+    const METRIC_MAP_COLS = {
+      "Economy": ["employment_rate", "avg_household_income", "poverty_rate",
+                   "crop_yield_index%", "farmer_income_avg", "farmer_debt_index",
+                   "market_access_score", "bank_access_score"],
+      "Education": ["literacy_rate", "female_literacy_rate", "dropout_rate",
+                     "school_count", "teacher_student_ratio", "digital_literacy_rate"],
+      "Health": ["infant_mortality_rate", "malnutrition_rate", "vaccination_coverage%",
+                 "medical_staff_per_1000", "avg_healthcare_access_time_min",
+                 "healthcare_effectiveness_score"],
+      "Infrastructure": ["drinking_water_coverage_pct", "sanitation_coverage_pct",
+                         "road_quality_index", "electricity_hours_per_day",
+                         "internet_penetration%", "nearest_hospital_distance_km"],
+      "Environment": ["flood_risk_score", "earthquake_risk_score", "air_quality_index",
+                       "forest_cover_pct", "disaster_preparedness_score",
+                       "climate_vulnerability_index"],
+      "Governance": ["panchayat_efficiency_score", "transparency_index",
+                     "fund_utilization_pct", "scheme_coverage_pct",
+                     "corruption_risk_proxy"],
+      "Social": ["total_crime_rate", "crimes_against_women_rate",
+                 "social_cohesion_index", "community_participation_score",
+                 "youth_engagement_score"]
+    };
+
+    const NEGATIVE_METRICS_LIST = [
+      "poverty_rate", "farmer_debt_index", "dropout_rate", "infant_mortality_rate", 
+      "malnutrition_rate", "avg_healthcare_access_time_min", "flood_risk_score", 
+      "earthquake_risk_score", "climate_vulnerability_index", "corruption_risk_proxy", 
+      "total_crime_rate", "crimes_against_women_rate", "nearest_hospital_distance_km",
+      "air_quality_index"
+    ];
+
+    const allMetrics = [];
+    Object.values(METRIC_MAP_COLS).forEach(cols => {
+      cols.forEach(col => {
+        allMetrics.push(col);
+      });
+    });
+
+    const selectCols = allMetrics.map(col => `v.[${col}]`).join(", ");
+    const rawData = db.prepare(`SELECT v.village_id, ${selectCols} FROM villages v WHERE v.state = ? AND v.district = ?`).all(state, district);
     
     const rawMetricsMap = {};
     rawData.forEach(row => {
@@ -453,7 +491,7 @@ app.get("/api/simulation/region", (req, res) => {
       if (min === max) return 50.0;
       let norm = ((val - min) / (max - min)) * 100;
       norm = Math.min(100, Math.max(0, norm));
-      const isNegative = ["poverty_rate", "dropout_rate", "malnutrition_rate", "avg_healthcare_access_time_min"].includes(col);
+      const isNegative = NEGATIVE_METRICS_LIST.includes(col);
       return isNegative ? (100 - norm) : norm;
     };
 
@@ -469,7 +507,7 @@ app.get("/api/simulation/region", (req, res) => {
       // Initialize simulated metrics
       const simMetrics = {};
       SLIDER_CONFIGS.forEach(cfg => {
-        const dbCol = cfg.col === "internet_penetration%" ? "internet_penetration%" : cfg.col;
+        const dbCol = cfg.col;
         simMetrics[cfg.col] = raw[dbCol] !== undefined ? raw[dbCol] : (metricMeta[cfg.col]?.min || 0);
       });
 
@@ -527,26 +565,26 @@ app.get("/api/simulation/region", (req, res) => {
         stepsCount++;
       }
 
-      // Recompute domain scores and overall score
-      const simScores = {
-        economy: v.economy_score,
-        education: v.education_score,
-        health: v.health_score,
-        infrastructure: v.infrastructure_score,
-        environment: v.environment_score,
-        governance: v.governance_score,
-        social: v.social_score
-      };
+      // Recompute domain scores and overall score using all domain metrics
+      const simScores = {};
+      Object.entries(METRIC_MAP_COLS).forEach(([category, mCols]) => {
+        const domain = category.toLowerCase();
+        let sum = 0;
+        let count = 0;
+        mCols.forEach(col => {
+          let val;
+          if (SLIDER_CONFIGS.some(cfg => cfg.col === col)) {
+            val = simMetrics[col]; // Use simulated value if it's optimized
+          } else {
+            val = raw[col]; // Use original DB value
+          }
 
-      // Recalculate only the optimized domains
-      Object.entries(METRIC_MAP_SIM).forEach(([domain, cols]) => {
-        if (cols.length > 0) {
-          let sum = 0;
-          cols.forEach(col => {
-            sum += getNormalizedValue(col, simMetrics[col]);
-          });
-          simScores[domain] = sum / cols.length;
-        }
+          if (val !== undefined && val !== null) {
+            sum += getNormalizedValue(col, val);
+            count++;
+          }
+        });
+        simScores[domain] = count > 0 ? sum / count : 50.0;
       });
 
       const simOverallScore = (simScores.economy + simScores.education + simScores.health + simScores.infrastructure + simScores.environment + simScores.governance + simScores.social) / 7;
