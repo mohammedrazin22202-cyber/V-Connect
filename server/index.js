@@ -352,6 +352,12 @@ app.get("/api/filters", (req, res) => {
 // Compare states by domain scores (leveraging precomputed stats table)
 app.get("/api/compare/states", (req, res) => {
   try {
+    const cacheKey = req.originalUrl;
+    const cached = getCachedResponse(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const stateList = req.query.states ? req.query.states.split(",") : [];
 
     const row = db.prepare("SELECT stat_value FROM dashboard_stats WHERE stat_key = 'state_comparison'").get();
@@ -365,7 +371,9 @@ app.get("/api/compare/states", (req, res) => {
       data = data.filter(d => stateList.includes(d.state));
     }
 
-    res.json({ data });
+    const resultObj = { data };
+    setCachedResponse(cacheKey, resultObj);
+    res.json(resultObj);
   } catch (err) {
     console.error("Compare states error:", err.message);
     res.status(500).json({ error: err.message });
