@@ -33,7 +33,9 @@ try {
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_health ON domain_scores(health_score DESC)").run();
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_infrastructure ON domain_scores(infrastructure_score DESC)").run();
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_environment ON domain_scores(environment_score DESC)").run();
-  console.log("✓ Connected to SQLite database (read-write, WAL enabled)");
+  db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_governance ON domain_scores(governance_score DESC)").run();
+  db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_social ON domain_scores(social_score DESC)").run();
+  console.log("✓ Connected to SQLite database (read-write, WAL enabled, indexes verified)");
 } catch (err) {
   console.error("✗ Failed to open database:", err.message);
   console.error("  Run 'python ingest.py' first to create the database.");
