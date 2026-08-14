@@ -29,6 +29,8 @@ try {
   db.pragma("journal_mode = WAL");
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_overall ON domain_scores(overall_score DESC)").run();
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_economy ON domain_scores(economy_score DESC)").run();
+  db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_education ON domain_scores(education_score DESC)").run();
+  db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_health ON domain_scores(health_score DESC)").run();
   console.log("✓ Connected to SQLite database (read-write, WAL enabled)");
 } catch (err) {
   console.error("✗ Failed to open database:", err.message);
