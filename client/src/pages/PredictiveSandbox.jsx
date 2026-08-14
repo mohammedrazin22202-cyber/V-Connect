@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchFilters, fetchCorrelationData } from '../api';
+import { fetchFilters, fetchCorrelationData, fetchDistrictAggregates } from '../api';
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line, Legend
@@ -58,9 +58,12 @@ export default function PredictiveSandbox() {
   const [loadingScatter, setLoadingScatter] = useState(false);
   const [loadingMatrix, setLoadingMatrix] = useState(false);
 
+  const [districtStats, setDistrictStats] = useState([]);
+
   // Load basic filter options
   useEffect(() => {
     fetchFilters().then(setFilters).catch(console.error);
+    fetchDistrictAggregates().then(setDistrictStats).catch(console.error);
     loadMatrix();
   }, []);
 
@@ -114,15 +117,23 @@ export default function PredictiveSandbox() {
     // Call state-comparison to get aggregate baseline scores for that state
     // (In a real system, we'd query the district. Here, we fetch state aggregates and run simulations)
     setTimeout(() => {
-      // Simulate base scores for the chosen district
-      const baseScores = {
-        economy: 48.5,
-        education: 52.1,
-        health: 45.8,
-        infrastructure: 41.2,
-        environment: 55.0,
-        governance: 49.3,
-        social: 60.1
+      const match = districtStats.find(d => d.state === state && d.district === district);
+      const baseScores = match ? {
+        economy: match.economy_score || 50,
+        education: match.education_score || 50,
+        health: match.health_score || 50,
+        infrastructure: match.infrastructure_score || 50,
+        environment: match.environment_score || 50,
+        governance: match.governance_score || 50,
+        social: match.social_score || 50
+      } : {
+        economy: 50,
+        education: 50,
+        health: 50,
+        infrastructure: 50,
+        environment: 50,
+        governance: 50,
+        social: 50
       };
 
       const yearsData = [];
