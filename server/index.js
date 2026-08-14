@@ -701,6 +701,8 @@ app.post("/api/admin/update-budget", (req, res) => {
       return res.status(404).json({ error: "Village not found or no changes made" });
     }
 
+    rebuildDashboardStats(); // update cache
+
     res.json({ success: true, message: `Village ${village_id} updated successfully.` });
   } catch (err) {
     console.error("Admin update budget error:", err.message);
