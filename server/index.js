@@ -31,6 +31,8 @@ try {
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_economy ON domain_scores(economy_score DESC)").run();
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_education ON domain_scores(education_score DESC)").run();
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_health ON domain_scores(health_score DESC)").run();
+  db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_infrastructure ON domain_scores(infrastructure_score DESC)").run();
+  db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_environment ON domain_scores(environment_score DESC)").run();
   console.log("✓ Connected to SQLite database (read-write, WAL enabled)");
 } catch (err) {
   console.error("✗ Failed to open database:", err.message);
