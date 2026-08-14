@@ -42,6 +42,26 @@ try {
   process.exit(1);
 }
 
+// ── In-Memory Response Cache ───────────────────────────────────────────
+const apiCache = new Map();
+
+function getCachedResponse(key) {
+  const item = apiCache.get(key);
+  if (item && item.expiry > Date.now()) {
+    return item.value;
+  }
+  return null;
+}
+
+function setCachedResponse(key, value, ttlMs = 60000) { // 1 minute default TTL
+  apiCache.set(key, { value, expiry: Date.now() + ttlMs });
+}
+
+function invalidateApiCache() {
+  apiCache.clear();
+  console.log("⚡ API response cache cleared.");
+}
+
 // ── Helper: safe integer parse ─────────────────────────────────────────
 function safeInt(val, fallback) {
   const n = parseInt(val, 10);
