@@ -71,6 +71,15 @@ export async function updateVillageBudget(payload = {}) {
   return res.json();
 }
 
+export async function ingestCSVData(csvContent) {
+  const res = await fetch(`${API_BASE}/admin/ingest-csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ csvContent }),
+  });
+  return res.json();
+}
+
 export async function fetchAdminStats() {
   const res = await fetch(`${API_BASE}/admin/stats`);
   return res.json();
