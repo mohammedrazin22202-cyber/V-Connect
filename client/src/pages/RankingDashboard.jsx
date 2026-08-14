@@ -245,6 +245,7 @@ export default function RankingDashboard() {
 
         const map = window.L.map('dashboard-map', {
           zoomControl: true,
+          preferCanvas: true,
         });
         mapRef.current = map;
 

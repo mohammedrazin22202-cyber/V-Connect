@@ -133,6 +133,7 @@ export default function SpatialAnalytics() {
           const map = window.L.map('analytics-map', {
             zoomControl: true,
             scrollWheelZoom: true,
+            preferCanvas: true,
           }).setView([20.5937, 78.9629], 5);
           
           window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
