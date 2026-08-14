@@ -232,7 +232,7 @@ def main():
     for cat, cols in METRIC_MAP.items():
         for col in cols:
             if col in master.columns:
-                master[col] = pd.to_numeric(master[col], errors="coerce").fillna(0.0)
+                master[col] = pd.to_numeric(master[col], errors="coerce")
 
     print(f"  Master dataset: {len(master)} villages, {len(master.columns)} columns", flush=True)
 
