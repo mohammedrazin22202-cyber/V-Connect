@@ -971,6 +971,7 @@ app.post("/api/admin/ingest-csv", (req, res) => {
     });
 
     runTransaction(updates);
+    invalidateApiCache();
 
     res.json({ success: true, message: `Successfully updated ${updates.length} village records. Scores & overall ranks recomputed.` });
   } catch (err) {
