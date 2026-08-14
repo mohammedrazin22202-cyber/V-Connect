@@ -302,11 +302,19 @@ app.get("/api/simulate-rank", (req, res) => {
 // Retrieve precomputed aggregate statistics for dashboard
 app.get("/api/stats", (req, res) => {
   try {
+    const cacheKey = req.originalUrl;
+    const cached = getCachedResponse(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const row = db.prepare("SELECT stat_value FROM dashboard_stats WHERE stat_key = 'summary'").get();
     if (!row) {
       return res.status(500).json({ error: "Summary stats not found. Database ingestion may be incomplete." });
     }
-    res.json(JSON.parse(row.stat_value));
+    const resultObj = JSON.parse(row.stat_value);
+    setCachedResponse(cacheKey, resultObj);
+    res.json(resultObj);
   } catch (err) {
     console.error("Stats error:", err.message);
     res.status(500).json({ error: err.message });
