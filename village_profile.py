@@ -173,7 +173,7 @@ def get_nearest_facility(page, village_query: str, facility_type: str, village_l
 
 # ----------------- Main Processing -----------------
 
-def process_villages(input_path: str, output_prefix: str, headless: bool = False):
+def process_villages(input_path: str, output_prefix: str, headless: bool = False, limit: int = 50):
     if not os.path.exists(input_path):
         print("Input file not found:", input_path)
         return
@@ -188,8 +188,8 @@ def process_villages(input_path: str, output_prefix: str, headless: bool = False
         if len(parts) >= 3:
             villages.append((parts[0].strip(), parts[1].strip(), parts[2].strip()))
 
-    # Limit to first 50 for testing
-    villages = villages[:50]
+    if limit > 0:
+        villages = villages[:limit]
 
     profiles = []
     today = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -242,6 +242,7 @@ if __name__ == "__main__":
     parser.add_argument("--input", "-i", required=True, help="Input TSV file")
     parser.add_argument("--output", "-o", default="village_profiles", help="Output file prefix")
     parser.add_argument("--headless", action="store_true", help="Run browser headless")
+    parser.add_argument("--limit", "-l", type=int, default=50, help="Limit number of villages to process (0 = all)")
     args = parser.parse_args()
 
-    process_villages(args.input, args.output, args.headless)
+    process_villages(args.input, args.output, args.headless, args.limit)

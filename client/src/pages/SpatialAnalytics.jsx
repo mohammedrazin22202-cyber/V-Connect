@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { fetchFilters, fetchRankings, fetchVillage, fetchDistrictAggregates } from '../api';
+import { fetchFilters, fetchRankings, fetchDistrictAggregates } from '../api';
 
 const INDICATORS = [
   { key: 'none', label: 'Overall Development Score' },

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { fetchRankings, fetchVillage } from '../api';
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const DOMAIN_LABELS = {
   economy_score: 'Economy',
