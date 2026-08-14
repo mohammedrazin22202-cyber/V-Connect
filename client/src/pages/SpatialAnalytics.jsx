@@ -202,9 +202,9 @@ export default function SpatialAnalytics() {
             const score = v.overall_score || 50;
 
             let markerColor = '#10b981';
-            if (isDeficient) {
+            if (isDeficient || score < 50) {
               markerColor = '#ef4444';
-            } else if (score < 50) {
+            } else if (score < 70) {
               markerColor = '#f59e0b';
             }
 
