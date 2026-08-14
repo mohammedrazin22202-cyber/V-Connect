@@ -140,6 +140,7 @@ app.get("/api/rankings", (req, res) => {
         v.village_id, v.village_name, v.district, v.state,
         v.total_population, v.priority_level, v.emergency_flag,
         v.intervention_category, v.village_urgency_score, v.latitude, v.longitude,
+        v.drinking_water_coverage_pct, v.sanitation_coverage_pct, v.nearest_hospital_distance_km, v.dropout_rate, v.poverty_rate,
         d.economy_score, d.education_score, d.health_score,
         d.infrastructure_score, d.environment_score,
         d.governance_score, d.social_score,
