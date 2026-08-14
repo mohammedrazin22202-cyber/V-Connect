@@ -161,14 +161,19 @@ def safe_normalize(series, invert=False):
 
 
 def compute_domain_score(df, domain):
-    """Compute a single domain score as the average of normalized sub-metrics."""
+    """Compute a single domain score as the average of normalized sub-metrics in METRIC_MAP."""
+    category = domain.capitalize()
+    cols = METRIC_MAP.get(category, [])
     parts = []
-    for col in DOMAIN_POSITIVE.get(domain, []):
+    negatives = {"poverty_rate", "farmer_debt_index", "dropout_rate", "infant_mortality_rate", 
+                 "malnutrition_rate", "avg_healthcare_access_time_min", "flood_risk_score", 
+                 "earthquake_risk_score", "climate_vulnerability_index", "corruption_risk_proxy", 
+                 "total_crime_rate", "crimes_against_women_rate", "nearest_hospital_distance_km",
+                 "air_quality_index"}
+    for col in cols:
         if col in df.columns:
-            parts.append(safe_normalize(df[col], invert=False))
-    for col in DOMAIN_NEGATIVE.get(domain, []):
-        if col in df.columns:
-            parts.append(safe_normalize(df[col], invert=True))
+            invert = col in negatives
+            parts.append(safe_normalize(df[col], invert=invert))
     if not parts:
         return pd.Series(50.0, index=df.index)
     stacked = pd.concat(parts, axis=1)
