@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchAdminStats, fetchRankings, updateVillageBudget, triggerPipelineRun, streamPipelineLogs } from '../api';
+import { fetchAdminStats, fetchRankings, updateVillageBudget, triggerPipelineRun, streamPipelineLogs, ingestCSVData } from '../api';
 
 export default function AdminPortal() {
   const [stats, setStats] = useState(null);
@@ -104,7 +104,7 @@ export default function AdminPortal() {
       logs.push("⏳ Initializing VCONNECT schema validator...");
       logs.push("📂 Reading raw CSV stream records...");
       
-      const csvContent = pastedCSV || (csvFile ? "village_id,poverty_rate,dropout_rate,malnutrition_rate\n1,34.2,4.5,12.1\n2,20.0,8.2,15.6" : "");
+      const csvContent = pastedCSV;
       if (!csvContent.trim()) {
         logs.push("❌ Error: No CSV content detected. Please paste text or select file.");
         setValidationLogs(logs);
@@ -112,20 +112,92 @@ export default function AdminPortal() {
         return;
       }
 
-      const lines = csvContent.split('\n');
-      const headers = lines[0].toLowerCase().split(',');
-      
+      const lines = csvContent.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        logs.push("❌ Error: CSV must contain a header and at least one data row.");
+        setValidationLogs(logs);
+        setValidating(false);
+        return;
+      }
+
+      const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
       logs.push(`🔍 Parsed header layout: [${headers.join(', ')}]`);
       
-      const expectedHeaders = ['village_id'];
-      const missing = expectedHeaders.filter(h => !headers.includes(h));
-      
-      if (missing.length > 0) {
-        logs.push(`❌ Validation Failed: Missing mandatory columns: [${missing.join(', ')}]`);
+      if (headers[0] !== 'village_id') {
+        logs.push("❌ Validation Failed: First column must be 'village_id'");
+        setValidationLogs(logs);
+        setValidating(false);
+        return;
+      }
+
+      const VALID_METRICS = [
+        "employment_rate", "avg_household_income", "poverty_rate", "crop_yield_index%",
+        "farmer_income_avg", "farmer_debt_index", "market_access_score", "bank_access_score",
+        "literacy_rate", "female_literacy_rate", "dropout_rate", "school_count",
+        "teacher_student_ratio", "digital_literacy_rate", "infant_mortality_rate",
+        "malnutrition_rate", "vaccination_coverage%", "medical_staff_per_1000",
+        "avg_healthcare_access_time_min", "healthcare_effectiveness_score",
+        "drinking_water_coverage_pct", "sanitation_coverage_pct", "road_quality_index",
+        "electricity_hours_per_day", "internet_penetration%", "nearest_hospital_distance_km",
+        "flood_risk_score", "earthquake_risk_score", "air_quality_index", "forest_cover_pct",
+        "disaster_preparedness_score", "climate_vulnerability_index", "panchayat_efficiency_score",
+        "transparency_index", "fund_utilization_pct", "scheme_coverage_pct",
+        "corruption_risk_proxy", "total_crime_rate", "crimes_against_women_rate",
+        "social_cohesion_index", "community_participation_score", "youth_engagement_score",
+        "recommended_budget_inr", "priority_level"
+      ];
+
+      const invalidHeaders = headers.slice(1).filter(h => !VALID_METRICS.includes(h));
+      if (invalidHeaders.length > 0) {
+        logs.push(`❌ Validation Failed: Invalid metric columns found: [${invalidHeaders.join(', ')}]`);
+        setValidationLogs(logs);
+        setValidating(false);
+        return;
+      }
+
+      logs.push("✅ Standard schema mapping matching SUCCESS (100% matched keys)");
+      logs.push(`📊 Scanning ${lines.length - 1} records for datatype validation...`);
+
+      let hasError = false;
+      for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].split(',').map(v => v.trim());
+        if (row.length !== headers.length) {
+          logs.push(`❌ Row ${i + 1} has mismatched column count (expected ${headers.length}, got ${row.length})`);
+          hasError = true;
+          break;
+        }
+        const villageId = parseInt(row[0], 10);
+        if (isNaN(villageId)) {
+          logs.push(`❌ Row ${i + 1} has invalid village_id: "${row[0]}"`);
+          hasError = true;
+          break;
+        }
+        
+        for (let j = 1; j < row.length; j++) {
+          const header = headers[j];
+          if (header === 'priority_level') {
+            const val = row[j].toLowerCase();
+            if (!['low', 'medium', 'high', 'critical', 'stable', 'moderate'].includes(val)) {
+              logs.push(`❌ Row ${i + 1} has invalid priority_level: "${row[j]}"`);
+              hasError = true;
+              break;
+            }
+          } else {
+            const val = parseFloat(row[j]);
+            if (isNaN(val)) {
+              logs.push(`❌ Row ${i + 1} has invalid numeric value for ${headers[j]}: "${row[j]}"`);
+              hasError = true;
+              break;
+            }
+          }
+        }
+        if (hasError) break;
+      }
+
+      if (hasError) {
+        logs.push("❌ Datatype verification: FAILED");
       } else {
-        logs.push("✅ Standard schema mapping matching SUCCESS (100% matched keys)");
-        logs.push(`📊 Scanning ${lines.length - 1} records for datatype validation...`);
-        logs.push("✅ Datatype verification: All records are numeric and aligned.");
+        logs.push("✅ Datatype verification: All records are valid and aligned.");
         logs.push("🚀 Ingestion simulation sandbox ready. Ready to append to SQLite.");
       }
 
@@ -134,25 +206,31 @@ export default function AdminPortal() {
     }, 800);
   };
 
-  const handleMockIngest = () => {
+  const handleIngestCSV = async () => {
     setIngesting(true);
     const logs = [...validationLogs];
     logs.push("⚙️ Starting transaction blocks...");
-    setValidationLogs(logs);
-
-    setTimeout(() => {
-      logs.push("📝 Appending records into villages master sqlite3...");
-      setValidationLogs([...logs]);
-      
-      setTimeout(() => {
+    logs.push("📝 Appending records into villages master sqlite3...");
+    setValidationLogs([...logs]);
+    
+    try {
+      const res = await ingestCSVData(pastedCSV);
+      if (res.success) {
         logs.push("✓ Transaction committed successfully.");
         logs.push("⚡ Regenerating database indexes on overall_rank & domains...");
         logs.push("🎉 Ingestion complete. Dashboard cache flushed.");
         setValidationLogs([...logs]);
-        setIngesting(false);
         loadStats();
-      }, 800);
-    }, 600);
+      } else {
+        logs.push(`❌ Ingestion failed: ${res.error || 'Unknown error'}`);
+        setValidationLogs([...logs]);
+      }
+    } catch (err) {
+      console.error(err);
+      logs.push(`❌ Network/Server error: ${err.message}`);
+      setValidationLogs([...logs]);
+    }
+    setIngesting(false);
   };
 
   const handleRunPipeline = async () => {
@@ -345,8 +423,36 @@ export default function AdminPortal() {
           </p>
 
           <form onSubmit={handleValidateCSV} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '14px', minHeight: 0 }}>
-            <div style={{ flex: 1, minHeight: '120px', display: 'flex', flexDirection: 'column' }}>
-              <label style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Paste CSV Content</label>
+            <div style={{ flex: 1, minHeight: '120px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Paste CSV Content or Upload</label>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => document.getElementById('admin-csv-file-input').click()}
+                  style={{ padding: '4px 10px', fontSize: '10px', height: '24px' }}
+                  id="admin-csv-upload-trigger"
+                >
+                  📂 Select file...
+                </button>
+                <input
+                  type="file"
+                  id="admin-csv-file-input"
+                  accept=".csv"
+                  onChange={e => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (evt) => {
+                        setPastedCSV(evt.target.result);
+                        setValidationLogs([`📂 Loaded CSV file: "${file.name}" (${file.size} bytes). Click "Validate CSV Schema" to inspect.`]);
+                      };
+                      reader.readAsText(file);
+                    }
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </div>
               <textarea
                 style={{
                   flex: 1, width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)',
@@ -375,7 +481,7 @@ export default function AdminPortal() {
                   type="button"
                   className="btn btn--primary"
                   style={{ flex: 1 }}
-                  onClick={handleMockIngest}
+                  onClick={handleIngestCSV}
                   disabled={ingesting}
                   id="admin-ingest-btn"
                 >
