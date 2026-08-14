@@ -33,7 +33,7 @@ export default function RankingDashboard() {
   const [order, setOrder] = useState('asc');
   const [page, setPage] = useState(1);
 
-  // Weight states
+  // Weight states (temporary/sliding values)
   const [wEco, setWEco] = useState(1);
   const [wEdu, setWEdu] = useState(1);
   const [wHea, setWHea] = useState(1);
@@ -42,6 +42,15 @@ export default function RankingDashboard() {
   const [wGov, setWGov] = useState(1);
   const [wSoc, setWSoc] = useState(1);
   const [showWeightsDrawer, setShowWeightsDrawer] = useState(false);
+
+  // Applied weights (trigger API queries only on apply)
+  const [appliedWEco, setAppliedWEco] = useState(1);
+  const [appliedWEdu, setAppliedWEdu] = useState(1);
+  const [appliedWHea, setAppliedWHea] = useState(1);
+  const [appliedWInf, setAppliedWInf] = useState(1);
+  const [appliedWEnv, setAppliedWEnv] = useState(1);
+  const [appliedWGov, setAppliedWGov] = useState(1);
+  const [appliedWSoc, setAppliedWSoc] = useState(1);
 
   // View state: table | map
   const [view, setView] = useState('table');
@@ -52,8 +61,8 @@ export default function RankingDashboard() {
   const mapRef = useRef(null);
 
   const isCustomWeightsActive = useMemo(() => {
-    return wEco !== 1 || wEdu !== 1 || wHea !== 1 || wInf !== 1 || wEnv !== 1 || wGov !== 1 || wSoc !== 1;
-  }, [wEco, wEdu, wHea, wInf, wEnv, wGov, wSoc]);
+    return appliedWEco !== 1 || appliedWEdu !== 1 || appliedWHea !== 1 || appliedWInf !== 1 || appliedWEnv !== 1 || appliedWGov !== 1 || appliedWSoc !== 1;
+  }, [appliedWEco, appliedWEdu, appliedWHea, appliedWInf, appliedWEnv, appliedWGov, appliedWSoc]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -67,13 +76,13 @@ export default function RankingDashboard() {
         district,
         priority,
         search,
-        w_eco: wEco,
-        w_edu: wEdu,
-        w_hea: wHea,
-        w_inf: wInf,
-        w_env: wEnv,
-        w_gov: wGov,
-        w_soc: wSoc,
+        w_eco: appliedWEco,
+        w_edu: appliedWEdu,
+        w_hea: appliedWHea,
+        w_inf: appliedWInf,
+        w_env: appliedWEnv,
+        w_gov: appliedWGov,
+        w_soc: appliedWSoc,
       });
       setData(result.data || []);
       setPagination(result.pagination || { page: 1, totalPages: 1, total: 0 });
@@ -81,7 +90,7 @@ export default function RankingDashboard() {
       console.error('Failed to load rankings:', err);
     }
     setLoading(false);
-  }, [page, sortBy, order, state, district, priority, search, wEco, wEdu, wHea, wInf, wEnv, wGov, wSoc]);
+  }, [page, sortBy, order, state, district, priority, search, appliedWEco, appliedWEdu, appliedWHea, appliedWInf, appliedWEnv, appliedWGov, appliedWSoc]);
 
   useEffect(() => {
     loadData();
@@ -204,20 +213,20 @@ export default function RankingDashboard() {
         district,
         priority,
         search,
-        w_eco: wEco,
-        w_edu: wEdu,
-        w_hea: wHea,
-        w_inf: wInf,
-        w_env: wEnv,
-        w_gov: wGov,
-        w_soc: wSoc,
+        w_eco: appliedWEco,
+        w_edu: appliedWEdu,
+        w_hea: appliedWHea,
+        w_inf: appliedWInf,
+        w_env: appliedWEnv,
+        w_gov: appliedWGov,
+        w_soc: appliedWSoc,
       });
       setMapData(result.data || []);
     } catch (err) {
       console.error('Failed to load map data:', err);
     }
     setMapLoading(false);
-  }, [view, mapDensity, sortBy, order, state, district, priority, search, wEco, wEdu, wHea, wInf, wEnv, wGov, wSoc]);
+  }, [view, mapDensity, sortBy, order, state, district, priority, search, appliedWEco, appliedWEdu, appliedWHea, appliedWInf, appliedWEnv, appliedWGov, appliedWSoc]);
 
   useEffect(() => {
     loadMapData();
@@ -389,7 +398,7 @@ export default function RankingDashboard() {
                 Domain Weights Customizer
               </h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Adjust sliders to change how each domain influences the overall score. Rankings will update in real-time.
+                Adjust sliders and click Apply to update the village rankings.
               </p>
             </div>
             <div style={{ display: 'flex', gap: '12px' }}>
@@ -397,6 +406,7 @@ export default function RankingDashboard() {
                 className="btn btn--ghost"
                 onClick={() => {
                   setWEco(1); setWEdu(1); setWHea(1); setWInf(1); setWEnv(1); setWGov(1); setWSoc(1);
+                  setAppliedWEco(1); setAppliedWEdu(1); setAppliedWHea(1); setAppliedWInf(1); setAppliedWEnv(1); setAppliedWGov(1); setAppliedWSoc(1);
                   setPage(1);
                 }}
                 id="reset-weights-btn"
@@ -407,8 +417,14 @@ export default function RankingDashboard() {
               <button
                 className="btn btn--primary"
                 onClick={() => {
+                  setAppliedWEco(wEco);
+                  setAppliedWEdu(wEdu);
+                  setAppliedWHea(wHea);
+                  setAppliedWInf(wInf);
+                  setAppliedWEnv(wEnv);
+                  setAppliedWGov(wGov);
+                  setAppliedWSoc(wSoc);
                   setPage(1);
-                  loadData();
                 }}
                 id="apply-weights-btn"
                 style={{ padding: '8px 16px', fontSize: '12px' }}
