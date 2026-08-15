@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchAdminStats, fetchRankings, updateVillageBudget, triggerPipelineRun, streamPipelineLogs, ingestCSVData } from '../api';
+import { fetchAdminStats, fetchRankings, updateVillageBudget, triggerPipelineRun, streamPipelineLogs, ingestCSVData, fetchDataQualityReport } from '../api';
 
 export default function AdminPortal() {
   const [stats, setStats] = useState(null);
@@ -28,8 +28,14 @@ export default function AdminPortal() {
   const [pipelineLogs, setPipelineLogs] = useState([]);
   const logTerminalRef = useRef(null);
 
+  // Data Quality states
+  const [qualityReport, setQualityReport] = useState(null);
+  const [loadingQuality, setLoadingQuality] = useState(true);
+  const [qualityTab, setQualityTab] = useState('summary');
+
   useEffect(() => {
     loadStats();
+    loadQualityReport();
   }, []);
 
   // Auto-scroll pipeline terminal
@@ -45,6 +51,14 @@ export default function AdminPortal() {
       .then(setStats)
       .catch(console.error)
       .finally(() => setLoadingStats(false));
+  };
+
+  const loadQualityReport = () => {
+    setLoadingQuality(true);
+    fetchDataQualityReport()
+      .then(setQualityReport)
+      .catch(console.error)
+      .finally(() => setLoadingQuality(false));
   };
 
   // Fetch search results
@@ -512,6 +526,315 @@ export default function AdminPortal() {
           )}
         </div>
 
+      </div>
+
+      {/* Real-time Data Integrity Audit Dashboard */}
+      <div className="glass-panel" style={{ padding: '20px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+          <div>
+            <h3 className="panel-title" style={{ marginBottom: '4px' }}>🔍 Data Integrity Audit & Anomaly Detection</h3>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+              Real-time audit scanning database entries for coordinate outliers, demographic deficits, and metric range inconsistencies.
+            </p>
+          </div>
+          <button
+            onClick={loadQualityReport}
+            disabled={loadingQuality}
+            className="btn btn--ghost"
+            style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
+            id="run-audit-btn"
+          >
+            {loadingQuality ? 'Auditing...' : '🔄 Run Audit'}
+          </button>
+        </div>
+
+        {loadingQuality ? (
+          <div style={{ padding: '40px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+            <div className="spinner" />
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Scanning SQL tables for anomaly indices...</span>
+          </div>
+        ) : qualityReport ? (
+          <div>
+            {/* Health Score Banner */}
+            <div style={{
+              display: 'flex', gap: '20px', alignItems: 'center', background: 'rgba(255,255,255,0.01)',
+              border: '1px solid var(--border)', padding: '16px', borderRadius: '8px', marginBottom: '20px', flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '120px', borderRight: '1px solid var(--border)', paddingRight: '20px' }}>
+                <span style={{ fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Integrity Rating</span>
+                <strong style={{
+                  fontSize: '26px',
+                  color: qualityReport.stats.healthScore >= 95 ? 'var(--success)' : qualityReport.stats.healthScore >= 85 ? '#f59e0b' : 'var(--danger)',
+                  margin: '4px 0 0 0'
+                }}>
+                  {qualityReport.stats.healthScore}%
+                </strong>
+              </div>
+
+              <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+                <div style={{ cursor: 'pointer' }} onClick={() => setQualityTab('coordinates')}>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>COORDINATES ERRORS</span>
+                  <strong style={{ display: 'block', fontSize: '14px', marginTop: '3px', color: qualityReport.stats.coordAnomalyCount > 0 ? '#ef4444' : 'var(--text-primary)' }}>
+                    {qualityReport.stats.coordAnomalyCount} flagged
+                  </strong>
+                </div>
+                <div style={{ cursor: 'pointer' }} onClick={() => setQualityTab('demographics')}>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>DEMOGRAPHIC ERRORS</span>
+                  <strong style={{ display: 'block', fontSize: '14px', marginTop: '3px', color: qualityReport.stats.demoAnomalyCount > 0 ? '#ef4444' : 'var(--text-primary)' }}>
+                    {qualityReport.stats.demoAnomalyCount} flagged
+                  </strong>
+                </div>
+                <div style={{ cursor: 'pointer' }} onClick={() => setQualityTab('percentages')}>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>RANGE INCONSISTENCIES</span>
+                  <strong style={{ display: 'block', fontSize: '14px', marginTop: '3px', color: qualityReport.stats.pctAnomalyCount > 0 ? '#ef4444' : 'var(--text-primary)' }}>
+                    {qualityReport.stats.pctAnomalyCount} flagged
+                  </strong>
+                </div>
+                <div style={{ cursor: 'pointer' }} onClick={() => setQualityTab('hospitals')}>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>ISOLATION OUTLIERS</span>
+                  <strong style={{ display: 'block', fontSize: '14px', marginTop: '3px', color: qualityReport.stats.hospAnomalyCount > 0 ? '#f59e0b' : 'var(--text-primary)' }}>
+                    {qualityReport.stats.hospAnomalyCount} flagged
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Quality detail tabs */}
+            <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '8px', marginBottom: '14px', overflowX: 'auto', whiteSpace: 'nowrap' }} className="no-print">
+              <button
+                className={`preset-btn ${qualityTab === 'summary' ? 'preset-btn--active' : ''}`}
+                style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer' }}
+                onClick={() => setQualityTab('summary')}
+              >
+                📋 Audit Summary
+              </button>
+              <button
+                className={`preset-btn ${qualityTab === 'coordinates' ? 'preset-btn--active' : ''}`}
+                style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer' }}
+                onClick={() => setQualityTab('coordinates')}
+              >
+                🗺️ Coordinate Outliers ({qualityReport.stats.coordAnomalyCount})
+              </button>
+              <button
+                className={`preset-btn ${qualityTab === 'demographics' ? 'preset-btn--active' : ''}`}
+                style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer' }}
+                onClick={() => setQualityTab('demographics')}
+              >
+                👨‍👩‍👧‍👦 Demographic Flags ({qualityReport.stats.demoAnomalyCount})
+              </button>
+              <button
+                className={`preset-btn ${qualityTab === 'percentages' ? 'preset-btn--active' : ''}`}
+                style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer' }}
+                onClick={() => setQualityTab('percentages')}
+              >
+                📊 Range Flags ({qualityReport.stats.pctAnomalyCount})
+              </button>
+              <button
+                className={`preset-btn ${qualityTab === 'hospitals' ? 'preset-btn--active' : ''}`}
+                style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer' }}
+                onClick={() => setQualityTab('hospitals')}
+              >
+                🏥 Proximity Flags ({qualityReport.stats.hospAnomalyCount})
+              </button>
+            </div>
+
+            {/* Tab content view */}
+            {qualityTab === 'summary' && (
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                <p style={{ margin: '0 0 10px 0' }}>
+                  The Data Integrity Engine executes database check constraints to identify outliers and physical impossibilities in your dataset.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginTop: '14px' }}>
+                  <div style={{ padding: '10px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                    <strong>🗺️ Coordinates boundaries check:</strong>
+                    <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Checks that coordinates coordinates fall within standard limits (India: Lat 6-38, Lon 68-98). Out-of-bounds coordinates indicate placement issues.
+                    </span>
+                  </div>
+                  <div style={{ padding: '10px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                    <strong>👨‍👩‍👧‍👦 Demographic thresholds check:</strong>
+                    <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Identifies records with zero or missing values for population or household counts, indicating incomplete surveys.
+                    </span>
+                  </div>
+                  <div style={{ padding: '10px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                    <strong>📊 Metric bounds check:</strong>
+                    <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Scans percentage columns (water coverage, sanitation, internet penetration) to flag values exceeding 100% or falling below 0%.
+                    </span>
+                  </div>
+                  <div style={{ padding: '10px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                    <strong>🏥 Isolation threshold outliers check:</strong>
+                    <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Flags villages where key infrastructure points (nearest hospital) indicate distance metrics exceeding 50 kilometers, denoting extreme isolation or measurement error.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {qualityTab === 'coordinates' && (
+              <div>
+                <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                  First 5 villages showing coordinate positions mapped outside bounding limits:
+                </p>
+                {qualityReport.anomalies.coordinates.length > 0 ? (
+                  <div className="table-container">
+                    <table className="ranking-table" style={{ width: '100%', fontSize: '11.5px' }}>
+                      <thead>
+                        <tr>
+                          <th>Village ID</th>
+                          <th>Village Name</th>
+                          <th>District, State</th>
+                          <th>Latitude</th>
+                          <th>Longitude</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {qualityReport.anomalies.coordinates.map(v => (
+                          <tr key={v.village_id} className="table-row">
+                            <td>{v.village_id}</td>
+                            <td><strong>{v.village_name}</strong></td>
+                            <td>{v.district}, {v.state}</td>
+                            <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{v.latitude?.toFixed(4) || 'NULL'}</td>
+                            <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{v.longitude?.toFixed(4) || 'NULL'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--success)', border: '1px dashed var(--border)', borderRadius: '6px', fontSize: '12px' }}>
+                    ✅ Excellent! No coordinate outliers detected.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {qualityTab === 'demographics' && (
+              <div>
+                <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                  First 5 villages showing zero or empty values in population and household surveys:
+                </p>
+                {qualityReport.anomalies.demographics.length > 0 ? (
+                  <div className="table-container">
+                    <table className="ranking-table" style={{ width: '100%', fontSize: '11.5px' }}>
+                      <thead>
+                        <tr>
+                          <th>Village ID</th>
+                          <th>Village Name</th>
+                          <th>District, State</th>
+                          <th>Total Population</th>
+                          <th>Households</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {qualityReport.anomalies.demographics.map(v => (
+                          <tr key={v.village_id} className="table-row">
+                            <td>{v.village_id}</td>
+                            <td><strong>{v.village_name}</strong></td>
+                            <td>{v.district}, {v.state}</td>
+                            <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{v.total_population?.toLocaleString() ?? 'NULL'}</td>
+                            <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{v.households?.toLocaleString() ?? 'NULL'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--success)', border: '1px dashed var(--border)', borderRadius: '6px', fontSize: '12px' }}>
+                    ✅ Excellent! No demographic anomalies detected.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {qualityTab === 'percentages' && (
+              <div>
+                <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                  First 5 villages showing percentage indicators out of standard [0, 100]% boundaries:
+                </p>
+                {qualityReport.anomalies.percentages.length > 0 ? (
+                  <div className="table-container">
+                    <table className="ranking-table" style={{ width: '100%', fontSize: '11.5px' }}>
+                      <thead>
+                        <tr>
+                          <th>Village ID</th>
+                          <th>Village Name</th>
+                          <th>Water Coverage</th>
+                          <th>Sanitation</th>
+                          <th>Internet Pen.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {qualityReport.anomalies.percentages.map(v => (
+                          <tr key={v.village_id} className="table-row">
+                            <td>{v.village_id}</td>
+                            <td><strong>{v.village_name}</strong></td>
+                            <td style={{ color: (v.drinking_water_coverage_pct < 0 || v.drinking_water_coverage_pct > 100) ? '#ef4444' : '#cbd5e1', fontWeight: 'bold' }}>
+                              {v.drinking_water_coverage_pct?.toFixed(1) || '0'}%
+                            </td>
+                            <td style={{ color: (v.sanitation_coverage_pct < 0 || v.sanitation_coverage_pct > 100) ? '#ef4444' : '#cbd5e1', fontWeight: 'bold' }}>
+                              {v.sanitation_coverage_pct?.toFixed(1) || '0'}%
+                            </td>
+                            <td style={{ color: (v['internet_penetration%'] < 0 || v['internet_penetration%'] > 100) ? '#ef4444' : '#cbd5e1', fontWeight: 'bold' }}>
+                              {v['internet_penetration%']?.toFixed(1) || '0'}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--success)', border: '1px dashed var(--border)', borderRadius: '6px', fontSize: '12px' }}>
+                    ✅ Excellent! No indicator range errors detected.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {qualityTab === 'hospitals' && (
+              <div>
+                <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: '0 0 10px 0' }}>
+                  First 5 villages with extreme hospital distance metrics (&gt; 50 km):
+                </p>
+                {qualityReport.anomalies.hospitalDistances.length > 0 ? (
+                  <div className="table-container">
+                    <table className="ranking-table" style={{ width: '100%', fontSize: '11.5px' }}>
+                      <thead>
+                        <tr>
+                          <th>Village ID</th>
+                          <th>Village Name</th>
+                          <th>District, State</th>
+                          <th>Hospital Distance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {qualityReport.anomalies.hospitalDistances.map(v => (
+                          <tr key={v.village_id} className="table-row">
+                            <td>{v.village_id}</td>
+                            <td><strong>{v.village_name}</strong></td>
+                            <td>{v.district}, {v.state}</td>
+                            <td style={{ color: '#f59e0b', fontWeight: 'bold' }}>{v.nearest_hospital_distance_km?.toFixed(1) || '0'} km</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--success)', border: '1px dashed var(--border)', borderRadius: '6px', fontSize: '12px' }}>
+                    ✅ Excellent! No isolated proximity outliers detected.
+                  </div>
+                )}
+              </div>
+            )}
+
+          </div>
+        ) : (
+          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+            Failed to load data quality audit. Make sure API connection is active.
+          </div>
+        )}
       </div>
 
       {/* Real Script subprocess terminal console (Full Width) */}
