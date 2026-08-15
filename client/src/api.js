@@ -134,3 +134,22 @@ export function streamPipelineLogs(onLog, onStatus) {
   return () => eventSource.close();
 }
 
+export async function fetchVillageHistory(id) {
+  const res = await fetch(`${API_BASE}/villages/${id}/history`);
+  return res.json();
+}
+
+export async function fetchVillageRecommendations(id) {
+  const res = await fetch(`${API_BASE}/villages/${id}/recommendations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  return res.json();
+}
+
+export async function fetchDataQualityReport() {
+  const res = await fetch(`${API_BASE}/admin/data-quality`);
+  return res.json();
+}
+
+
