@@ -29,6 +29,11 @@ export default function PolicySandbox() {
   const [simulation, setSimulation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Strategy comparison mode states
+  const [compareMode, setCompareMode] = useState(false);
+  const [strategyB, setStrategyB] = useState('education');
+  const [simulationB, setSimulationB] = useState(null);
 
   // Load filter options
   useEffect(() => {
@@ -57,16 +62,41 @@ export default function PolicySandbox() {
     setError(null);
     setLoading(true);
     try {
-      const data = await fetchRegionalSimulation({
-        state,
-        district,
-        budget: parseFloat(budget) || 5000000,
-        strategy
-      });
-      if (data.success) {
-        setSimulation(data);
+      if (compareMode) {
+        const [resA, resB] = await Promise.all([
+          fetchRegionalSimulation({
+            state,
+            district,
+            budget: parseFloat(budget) || 5000000,
+            strategy
+          }),
+          fetchRegionalSimulation({
+            state,
+            district,
+            budget: parseFloat(budget) || 5000000,
+            strategy: strategyB
+          })
+        ]);
+        
+        if (resA.success && resB.success) {
+          setSimulation(resA);
+          setSimulationB(resB);
+        } else {
+          setError((!resA.success ? resA.error : resB.error) || "Simulation run failed.");
+        }
       } else {
-        setError(data.error || "Simulation run failed.");
+        const data = await fetchRegionalSimulation({
+          state,
+          district,
+          budget: parseFloat(budget) || 5000000,
+          strategy
+        });
+        if (data.success) {
+          setSimulation(data);
+          setSimulationB(null);
+        } else {
+          setError(data.error || "Simulation run failed.");
+        }
       }
     } catch (err) {
       console.error(err);
@@ -95,6 +125,16 @@ export default function PolicySandbox() {
       Gain: v.score_gain
     }));
   }, [simulation]);
+
+  const comparisonBudgetData = useMemo(() => {
+    if (!simulation || !simulation.domainBudgetSpent || !simulationB || !simulationB.domainBudgetSpent) return [];
+    const domains = Object.keys(DOMAIN_COLORS);
+    return domains.map(dom => ({
+      name: dom.toUpperCase(),
+      [simulation.strategy.toUpperCase()]: Math.round(simulation.domainBudgetSpent[dom] || 0),
+      [simulationB.strategy.toUpperCase()]: Math.round(simulationB.domainBudgetSpent[dom] || 0)
+    })).filter(d => d[simulation.strategy.toUpperCase()] > 0 || d[simulationB.strategy.toUpperCase()] > 0);
+  }, [simulation, simulationB]);
 
   return (
     <div className="dashboard animate-in">
@@ -154,30 +194,78 @@ export default function PolicySandbox() {
             </div>
           </div>
 
-          <div>
-            <label style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600', display: 'block', marginBottom: '8px' }}>
-              Select Focus Policy Strategy
+          <div style={{ background: 'rgba(255,255,255,0.01)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 'bold', color: '#fff', cursor: 'pointer', marginBottom: '16px' }}>
+              <input 
+                type="checkbox" 
+                checked={compareMode} 
+                onChange={e => {
+                  setCompareMode(e.target.checked);
+                  setSimulation(null);
+                  setSimulationB(null);
+                }} 
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                id="sandbox-compare-toggle"
+              />
+              Enable Strategy Comparison Mode (Compare two different strategies side-by-side)
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px' }}>
-              {STRATEGIES.map(s => (
-                <div
-                  key={s.key}
-                  onClick={() => setStrategy(s.key)}
-                  style={{
-                    padding: '14px',
-                    borderRadius: '8px',
-                    border: `1px solid ${strategy === s.key ? 'var(--accent)' : 'var(--border)'}`,
-                    background: strategy === s.key ? 'rgba(99,102,241,0.06)' : 'rgba(255,255,255,0.01)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                  }}
-                  className="strategy-card"
-                  id={`strategy-card-${s.key}`}
-                >
-                  <strong style={{ fontSize: '13px', display: 'block', color: strategy === s.key ? '#fff' : 'var(--text-primary)' }}>{s.label}</strong>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginTop: '4px', lineHeight: '1.4' }}>{s.desc}</span>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '800', display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {compareMode ? 'Strategy A (Focus)' : 'Select Focus Policy Strategy'}
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  {STRATEGIES.map(s => (
+                    <div
+                      key={s.key}
+                      onClick={() => setStrategy(s.key)}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: '8px',
+                        border: `1px solid ${strategy === s.key ? 'var(--accent)' : 'var(--border)'}`,
+                        background: strategy === s.key ? 'rgba(99,102,241,0.06)' : 'rgba(255,255,255,0.01)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                      className="strategy-card"
+                      id={`strategy-card-a-${s.key}`}
+                    >
+                      <strong style={{ fontSize: '12.5px', display: 'block', color: strategy === s.key ? '#fff' : 'var(--text-primary)' }}>{s.label}</strong>
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', display: 'block', marginTop: '4px', lineHeight: '1.3' }}>{s.desc}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              {compareMode && (
+                <div>
+                  <label style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '800', display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Strategy B (Comparison)
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                    {STRATEGIES.map(s => (
+                      <div
+                        key={s.key}
+                        onClick={() => setStrategyB(s.key)}
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: '8px',
+                          border: `1px solid ${strategyB === s.key ? '#06b6d4' : 'var(--border)'}`,
+                          background: strategyB === s.key ? 'rgba(6,182,212,0.06)' : 'rgba(255,255,255,0.01)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                        className="strategy-card"
+                        id={`strategy-card-b-${s.key}`}
+                      >
+                        <strong style={{ fontSize: '12.5px', display: 'block', color: strategyB === s.key ? '#fff' : 'var(--text-primary)' }}>{s.label}</strong>
+                        <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', display: 'block', marginTop: '4px', lineHeight: '1.3' }}>{s.desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -211,7 +299,7 @@ export default function PolicySandbox() {
       )}
 
       {/* Simulator results panel */}
-      {simulation && !loading && (
+      {simulation && !simulationB && !loading && (
         <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
           {/* Main aggregation stats row */}
@@ -367,6 +455,160 @@ export default function PolicySandbox() {
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* Comparison Results Dashboard */}
+      {simulation && simulationB && !loading && (
+        <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          <div style={{ background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.15)', borderRadius: '12px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Comparing Policies for</span>
+              <h3 style={{ margin: '4px 0 0 0', fontSize: '18px', color: '#fff', fontWeight: 'bold' }}>{district}, {state}</h3>
+            </div>
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <span style={{ background: 'rgba(99, 102, 241, 0.2)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', border: '1px solid rgba(99, 102, 241, 0.4)' }}>
+                A: {STRATEGIES.find(s => s.key === strategy)?.label.split(' ')[1]}
+              </span>
+              <span style={{ background: 'rgba(6, 182, 212, 0.2)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', border: '1px solid rgba(6, 182, 212, 0.4)' }}>
+                B: {STRATEGIES.find(s => s.key === strategyB)?.label.split(' ')[1]}
+              </span>
+            </div>
+          </div>
+
+          {/* Aggregated Comparisons stats grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+            <div className="stat-card glass-panel" style={{ borderLeft: '4px solid var(--text-muted)' }}>
+              <div className="stat-card__label">Baseline Avg Score</div>
+              <div className="stat-card__value" style={{ color: 'var(--text-secondary)' }}>{simulation.summary.baselineAvgScore?.toFixed(1)}</div>
+              <div className="stat-card__desc">District Rank: #{simulation.summary.baselineRank?.toLocaleString()}</div>
+            </div>
+
+            <div className="stat-card glass-panel" style={{ borderLeft: '4px solid var(--accent)' }}>
+              <div className="stat-card__label">Strategy A: {STRATEGIES.find(s => s.key === strategy)?.label.replace(/[^\w\s&]/gi, '').trim()}</div>
+              <div className="stat-card__value" style={{ color: 'var(--accent)' }}>{simulation.summary.simulatedAvgScore?.toFixed(1)}</div>
+              <div className="stat-card__desc">Gain: +{simulation.summary.avgScoreGain?.toFixed(1)} | Rank shift: +{simulation.summary.rankImprovement?.toLocaleString()}</div>
+            </div>
+
+            <div className="stat-card glass-panel" style={{ borderLeft: '4px solid #06b6d4' }}>
+              <div className="stat-card__label">Strategy B: {STRATEGIES.find(s => s.key === strategyB)?.label.replace(/[^\w\s&]/gi, '').trim()}</div>
+              <div className="stat-card__value" style={{ color: '#06b6d4' }}>{simulationB.summary.simulatedAvgScore?.toFixed(1)}</div>
+              <div className="stat-card__desc">Gain: +{simulationB.summary.avgScoreGain?.toFixed(1)} | Rank shift: +{simulationB.summary.rankImprovement?.toLocaleString()}</div>
+            </div>
+          </div>
+
+          {/* Multi-strategy charts */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
+            {/* Grouped Budget Allocations */}
+            <div className="glass-panel" style={{ minHeight: '380px', padding: '20px', display: 'flex', flexDirection: 'column' }}>
+              <h3 className="panel-title" style={{ marginBottom: '14px' }}>Budget Split Comparison (INR)</h3>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                Grouped budget allocation compare between strategy A (purple) and strategy B (blue).
+              </p>
+              <div style={{ flex: 1 }}>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={comparisonBudgetData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                    <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                    <Tooltip
+                      formatter={(value) => [`₹${value.toLocaleString()}`, 'Budget']}
+                      contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid var(--border)', borderRadius: '8px' }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                    <Bar dataKey={simulation.strategy.toUpperCase()} fill="var(--accent)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey={simulationB.strategy.toUpperCase()} fill="#06b6d4" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Strategy comparisons summary */}
+            <div className="glass-panel" style={{ minHeight: '380px', padding: '20px', display: 'flex', flexDirection: 'column' }}>
+              <h3 className="panel-title" style={{ marginBottom: '14px' }}>Strategic Policy Insights</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '13px', lineHeight: '1.5', marginTop: '10px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                  <strong>🏆 Direct Outcome Comparison:</strong>
+                  <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {simulation.summary.simulatedAvgScore > simulationB.summary.simulatedAvgScore ? (
+                      <span><strong>Strategy A ({simulation.strategy.toUpperCase()})</strong> yields a higher average district development score (+{(simulation.summary.simulatedAvgScore - simulationB.summary.simulatedAvgScore).toFixed(2)} points higher than Strategy B).</span>
+                    ) : simulation.summary.simulatedAvgScore < simulationB.summary.simulatedAvgScore ? (
+                      <span><strong>Strategy B ({simulationB.strategy.toUpperCase()})</strong> yields a higher average district development score (+{(simulationB.summary.simulatedAvgScore - simulation.summary.simulatedAvgScore).toFixed(2)} points higher than Strategy A).</span>
+                    ) : (
+                      <span>Both strategies yield the exact same average overall score improvement.</span>
+                    )}
+                  </p>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                  <strong>💸 Spending Efficiency:</strong>
+                  <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Strategy A allocated <strong>₹{simulation.summary.allocatedBudgetSum?.toLocaleString()}</strong> across <strong>{simulation.summary.totalVillages}</strong> villages.
+                    Strategy B allocated <strong>₹{simulationB.summary.allocatedBudgetSum?.toLocaleString()}</strong>.
+                    Strategy A led to <strong>+{simulation.summary.rankImprovement?.toLocaleString()}</strong> places national rank improvement vs <strong>+{simulationB.summary.rankImprovement?.toLocaleString()}</strong> for Strategy B.
+                  </p>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                  <strong>📈 Recommendation:</strong>
+                  <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    If your goal is to maximize general district-wide rank improvements, we recommend deploying <strong>{simulation.summary.simulatedAvgScore >= simulationB.summary.simulatedAvgScore ? `Strategy A (${simulation.strategy.toUpperCase()})` : `Strategy B (${simulationB.strategy.toUpperCase()})`}</strong>. Ensure funding targets critical priority villages first.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Side by side comparison table */}
+          <div className="glass-panel" style={{ padding: '20px' }}>
+            <h3 className="panel-title" style={{ marginBottom: '12px' }}>Comparison of Village Outcomes</h3>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '18px' }}>
+              Comparison of budget allocations and simulated scores for individual villages (top 100).
+            </p>
+            <div className="table-container">
+              <table className="ranking-table" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th>Village Name</th>
+                    <th>Priority</th>
+                    <th>Baseline</th>
+                    <th>Allocated Budget (A)</th>
+                    <th>Simulated Score (A)</th>
+                    <th>Allocated Budget (B)</th>
+                    <th>Simulated Score (B)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {simulation.villages.map((v, idx) => {
+                    const vB = simulationB.villages.find(vb => vb.village_id === v.village_id) || {};
+                    return (
+                      <tr key={v.village_id} className="table-row">
+                        <td className="td-village"><strong>{v.village_name}</strong></td>
+                        <td>
+                          <span className={`priority-badge priority--${v.priority_level?.toLowerCase()}`}>
+                            {v.priority_level}
+                          </span>
+                        </td>
+                        <td>{v.overall_score?.toFixed(1)}</td>
+                        <td style={{ color: 'var(--accent)', fontWeight: 'bold' }}>
+                          ₹{v.budget_allocated?.toLocaleString()}
+                        </td>
+                        <td style={{ color: 'var(--accent)', fontWeight: 'bold' }}>
+                          {v.simulated_overall_score?.toFixed(1)}
+                        </td>
+                        <td style={{ color: '#06b6d4', fontWeight: 'bold' }}>
+                          ₹{vB.budget_allocated?.toLocaleString() || '0'}
+                        </td>
+                        <td style={{ color: '#06b6d4', fontWeight: 'bold' }}>
+                          {vB.simulated_overall_score?.toFixed(1) || '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
