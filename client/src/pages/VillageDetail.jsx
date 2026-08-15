@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend
+  ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend,
+  LineChart, Line, XAxis, YAxis, CartesianGrid
 } from 'recharts';
-import { fetchVillage, fetchSimulatedRank } from '../api';
+import { fetchVillage, fetchSimulatedRank, fetchVillageHistory } from '../api';
 
 const DOMAIN_LABELS = {
   economy_score: 'Economy',
@@ -111,6 +112,8 @@ export default function VillageDetail() {
   const [customBudget, setCustomBudget] = useState('');
   const [activePreset, setActivePreset] = useState(null);
   const [checkedProjects, setCheckedProjects] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Apply pre-configured simulation presets to evaluate specific development campaign outcomes
   const applyPreset = (presetType) => {
@@ -288,6 +291,16 @@ export default function VillageDetail() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    setLoadingHistory(true);
+    fetchVillageHistory(id)
+      .then(res => {
+        if (res.success) {
+          setHistory(res.history || []);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoadingHistory(false));
   }, [id]);
 
   // Priority classification helper
@@ -669,6 +682,52 @@ export default function VillageDetail() {
           <div id="village-local-map" style={{ flex: 1, width: '100%', borderRadius: '8px', zIndex: 1 }} />
         </div>
       </div>
+
+      {/* Historical Trends Time-Series Card */}
+      <div className="glass-panel" style={{ padding: '24px', marginBottom: '24px' }}>
+        <h3 className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          📈 Historical Development Trajectory (Time-Series)
+        </h3>
+        <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+          Multi-year tracking of overall and domain-specific index scores across past budget years.
+        </p>
+        
+        {loadingHistory ? (
+          <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="spinner" />
+            <span style={{ marginLeft: '10px' }}>Loading timeline...</span>
+          </div>
+        ) : history.length === 0 ? (
+          <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+            No historical records available for this village.
+          </div>
+        ) : (
+          <div style={{ height: '300px', width: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={history} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="year" tick={{ fill: '#94a3b8' }} />
+                <YAxis domain={[0, 100]} tick={{ fill: '#94a3b8' }} />
+                <Tooltip
+                  contentStyle={{
+                    background: 'rgba(15, 23, 42, 0.95)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    color: '#f8fafc'
+                  }}
+                />
+                <Legend />
+                <Line type="monotone" dataKey="overall_score" name="Overall Score" stroke="#6366f1" strokeWidth={3} activeDot={{ r: 8 }} />
+                <Line type="monotone" dataKey="economy_score" name="Economy" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 5" />
+                <Line type="monotone" dataKey="education_score" name="Education" stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="5 5" />
+                <Line type="monotone" dataKey="health_score" name="Health" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 5" />
+                <Line type="monotone" dataKey="infrastructure_score" name="Infrastructure" stroke="#06b6d4" strokeWidth={1.5} strokeDasharray="5 5" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
 
       {/* Intervention simulator control dashboard */}
       <div className="glass-panel" style={{ padding: '24px', marginBottom: '32px' }}>
