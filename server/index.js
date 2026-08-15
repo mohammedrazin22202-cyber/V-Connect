@@ -19,91 +19,6 @@ const DB_PATH = path.join(__dirname, "vconnect.db");
 app.use(cors());
 app.use(express.json());
 
-// ── Historical Scores Database Initialization & Seeding ──────────────
-function initializeHistoricalScores() {
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS historical_scores (
-      village_id INTEGER NOT NULL,
-      year INTEGER NOT NULL,
-      economy_score REAL,
-      education_score REAL,
-      health_score REAL,
-      infrastructure_score REAL,
-      environment_score REAL,
-      governance_score REAL,
-      social_score REAL,
-      overall_score REAL,
-      PRIMARY KEY (village_id, year),
-      FOREIGN KEY (village_id) REFERENCES villages(village_id)
-    )
-  `).run();
-
-  const countRow = db.prepare("SELECT COUNT(*) as count FROM historical_scores").get();
-  if (countRow.count > 0) {
-    console.log("✓ historical_scores table verified (already seeded)");
-    return;
-  }
-
-  console.log("⚙️ historical_scores table empty. Starting self-seeding routine...");
-  const t0 = Date.now();
-
-  const domainScores = db.prepare("SELECT * FROM domain_scores").all();
-  if (domainScores.length === 0) {
-    console.log("⚠️ domain_scores table is empty. Seeding skipped.");
-    return;
-  }
-
-  const insertStmt = db.prepare(`
-    INSERT INTO historical_scores (
-      village_id, year, economy_score, education_score, health_score,
-      infrastructure_score, environment_score, governance_score, social_score, overall_score
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const runSeedingTransaction = db.transaction((records) => {
-    for (const r of records) {
-      insertStmt.run(r);
-    }
-  });
-
-  const years = [2023, 2024, 2025];
-  const recordsToInsert = [];
-
-  for (const ds of domainScores) {
-    const vId = ds.village_id;
-
-    for (const yr of years) {
-      const yearMultiplier = (yr - 2026) * 0.95; 
-      
-      const economy_score = Math.max(0, Math.min(100, ds.economy_score + (Math.random() * 6 - 3.5) + yearMultiplier));
-      const education_score = Math.max(0, Math.min(100, ds.education_score + (Math.random() * 6 - 3.5) + yearMultiplier));
-      const health_score = Math.max(0, Math.min(100, ds.health_score + (Math.random() * 6 - 3.5) + yearMultiplier));
-      const infrastructure_score = Math.max(0, Math.min(100, ds.infrastructure_score + (Math.random() * 6 - 3.5) + yearMultiplier));
-      const environment_score = Math.max(0, Math.min(100, ds.environment_score + (Math.random() * 6 - 3.5) + yearMultiplier));
-      const governance_score = Math.max(0, Math.min(100, ds.governance_score + (Math.random() * 6 - 3.5) + yearMultiplier));
-      const social_score = Math.max(0, Math.min(100, ds.social_score + (Math.random() * 6 - 3.5) + yearMultiplier));
-
-      const overall_score = Math.max(0, Math.min(100, (
-        economy_score + education_score + health_score +
-        infrastructure_score + environment_score + governance_score + social_score
-      ) / 7));
-
-      recordsToInsert.push([
-        vId, yr, economy_score, education_score, health_score,
-        infrastructure_score, environment_score, governance_score, social_score, overall_score
-      ]);
-    }
-  }
-
-  const CHUNK_SIZE = 5000;
-  for (let i = 0; i < recordsToInsert.length; i += CHUNK_SIZE) {
-    const chunk = recordsToInsert.slice(i, i + CHUNK_SIZE);
-    runSeedingTransaction(chunk);
-  }
-
-  console.log(`✓ Seeded ${recordsToInsert.length.toLocaleString()} historical score entries across ${years.length} years (${Date.now() - t0}ms)`);
-}
-
 // ── Database Connection ────────────────────────────────────────────────
 let db;
 try {
@@ -120,13 +35,99 @@ try {
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_environment ON domain_scores(environment_score DESC)").run();
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_governance ON domain_scores(governance_score DESC)").run();
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_social ON domain_scores(social_score DESC)").run();
-  console.log("✓ Connected to SQLite database (read-write, WAL enabled, indexes verified)");
+  
+  // Initialize historical scores table & seed multi-year data if empty
   initializeHistoricalScores();
+  
+  console.log("✓ Connected to SQLite database (read-write, WAL enabled, indexes verified)");
 } catch (err) {
   console.error("✗ Failed to open database:", err.message);
   console.error("  Run 'python ingest.py' first to create the database.");
   process.exit(1);
 }
+
+// ── Historical Scores Seeding ─────────────────────────────────────────
+function initializeHistoricalScores() {
+  try {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS historical_scores (
+          village_id INTEGER,
+          year INTEGER,
+          economy_score REAL,
+          education_score REAL,
+          health_score REAL,
+          infrastructure_score REAL,
+          environment_score REAL,
+          governance_score REAL,
+          social_score REAL,
+          overall_score REAL,
+          PRIMARY KEY (village_id, year),
+          FOREIGN KEY (village_id) REFERENCES villages(village_id)
+      )
+    `).run();
+
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_historical_village ON historical_scores(village_id)").run();
+
+    const countRow = db.prepare("SELECT COUNT(*) as count FROM historical_scores").get();
+    if (countRow.count === 0) {
+      console.log("⚡ Historical scores table is empty. Auto-seeding multi-year data...");
+      
+      const villages = db.prepare("SELECT * FROM domain_scores").all();
+      if (villages.length === 0) {
+        console.log("⚠ No records in domain_scores to seed history from.");
+        return;
+      }
+
+      const insert = db.prepare(`
+        INSERT INTO historical_scores 
+        (village_id, year, economy_score, education_score, health_score, infrastructure_score, environment_score, governance_score, social_score, overall_score)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const insertMany = db.transaction((records) => {
+        for (const r of records) {
+          insert.run(
+            r.village_id, r.year, 
+            r.economy_score, r.education_score, r.health_score, r.infrastructure_score, 
+            r.environment_score, r.governance_score, r.social_score, r.overall_score
+          );
+        }
+      });
+
+      const recordsToInsert = [];
+      const domains = ["economy_score", "education_score", "health_score", "infrastructure_score", "environment_score", "governance_score", "social_score"];
+
+      for (const v of villages) {
+        let prevScores = { ...v };
+        
+        for (let year = 2025; year >= 2023; year--) {
+          const hist = { village_id: v.village_id, year };
+          let sum = 0;
+          
+          for (const dom of domains) {
+            const base = prevScores[dom] ?? 50.0;
+            const dec = 0.5 + Math.random() * 2.0;
+            const score = Math.max(0.0, Math.min(100.0, base - dec));
+            hist[dom] = Number(score.toFixed(2));
+            prevScores[dom] = score;
+            sum += score;
+          }
+          hist.overall_score = Number((sum / 7).toFixed(2));
+          recordsToInsert.push(hist);
+        }
+      }
+
+      for (let i = 0; i < recordsToInsert.length; i += 5000) {
+        insertMany(recordsToInsert.slice(i, i + 5000));
+      }
+
+      console.log(`✓ Seeded ${recordsToInsert.length.toLocaleString()} historical records across ${villages.length.toLocaleString()} villages.`);
+    }
+  } catch (err) {
+    console.error("✗ Failed to initialize historical scores table:", err.message);
+  }
+}
+
 
 // ── In-Memory Response Cache ───────────────────────────────────────────
 const apiCache = new Map();
@@ -153,133 +154,6 @@ function safeInt(val, fallback) {
   const n = parseInt(val, 10);
   return isNaN(n) ? fallback : n;
 }
-
-// ── GET /api/villages/:id/history ──────────────────────────────────────
-app.get("/api/villages/:id/history", (req, res) => {
-  const villageId = safeInt(req.params.id, null);
-  if (!villageId) {
-    return res.status(400).json({ error: "Invalid village ID" });
-  }
-  try {
-    const history = db.prepare("SELECT * FROM historical_scores WHERE village_id = ? ORDER BY year ASC").all(villageId);
-    const anchor = db.prepare("SELECT * FROM domain_scores WHERE village_id = ?").get(villageId);
-    
-    if (anchor) {
-      history.push({
-        village_id: anchor.village_id,
-        year: 2026,
-        economy_score: anchor.economy_score,
-        education_score: anchor.education_score,
-        health_score: anchor.health_score,
-        infrastructure_score: anchor.infrastructure_score,
-        environment_score: anchor.environment_score,
-        governance_score: anchor.governance_score,
-        social_score: anchor.social_score,
-        overall_score: anchor.overall_score
-      });
-    }
-    res.json({ success: true, history });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to retrieve historical scores from engine." });
-  }
-});
-
-// ── POST /api/villages/:id/recommendations ─────────────────────────────────
-app.post("/api/villages/:id/recommendations", async (req, res) => {
-  const villageId = safeInt(req.params.id, null);
-  if (!villageId) {
-    return res.status(400).json({ error: "Invalid village ID" });
-  }
-  try {
-    const village = db.prepare("SELECT * FROM villages WHERE village_id = ?").get(villageId);
-    const scores = db.prepare("SELECT * FROM domain_scores WHERE village_id = ?").get(villageId);
-    
-    if (!village || !scores) {
-      return res.status(404).json({ error: "Village data not found." });
-    }
-
-    const sectors = [
-      { name: "Economy", score: scores.economy_score },
-      { name: "Education", score: scores.education_score },
-      { name: "Health", score: scores.health_score },
-      { name: "Infrastructure", score: scores.infrastructure_score },
-      { name: "Environment", score: scores.environment_score },
-      { name: "Governance", score: scores.governance_score },
-      { name: "Social Cohesion", score: scores.social_score }
-    ];
-    
-    sectors.sort((a, b) => a.score - b.score);
-    const lowestSectors = sectors.slice(0, 3);
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey) {
-      try {
-        const prompt = `Generate a structured rural development policy plan for ${village.village_name} village, situated in ${village.district} district, ${village.state} state.
-Demographics: Population of ${village.total_population?.toLocaleString()} across ${village.households?.toLocaleString()} households.
-Current developmental deficit scores (out of 100):
-${sectors.map(s => `- ${s.name}: ${s.score?.toFixed(1)}`).join('\n')}
-
-The three lowest sectors requiring critical action are:
-${lowestSectors.map(s => `- ${s.name} (Score: ${s.score?.toFixed(1)})`).join('\n')}
-
-Provide exactly three strategic policy initiatives corresponding to the lowest sectors. Focus on budget estimations (INR), expected output targets, and timeline milestones. Print in standard GitHub Markdown format. Keep the proposal practical and highly actionable.`;
-
-        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-          })
-        });
-        
-        const responseData = await geminiRes.json();
-        if (responseData.candidates && responseData.candidates[0]?.content?.parts[0]?.text) {
-          return res.json({
-            success: true,
-            provider: "gemini",
-            recommendations: responseData.candidates[0].content.parts[0].text
-          });
-        }
-      } catch (geminiError) {
-        console.warn("⚠️ Gemini API execution failed. Engaging rule-based offline generator fallback.", geminiError.message);
-      }
-    }
-
-    const offlineText = `### 📋 Offline Development Strategy for **${village.village_name}**
-#### Deficit Sector Priorities: ${lowestSectors.map(s => s.name).join(', ')}
-
----
-
-#### 📍 Initiative 1: ${lowestSectors[0].name} Sector Intervention
-*   **Target Strategy**: Infrastructure and process upgrades to improve current index of **${lowestSectors[0].score?.toFixed(1)}**.
-*   **Budget Allocation**: ₹3,500,000 INR
-*   **Action Plan**: Establish community resource hubs and implement specialized training to support local capacity building.
-*   **Timeline**: 6–9 months
-
-#### 📍 Initiative 2: ${lowestSectors[1].name} Sector Intervention
-*   **Target Strategy**: Sectoral integration and facility expansion.
-*   **Budget Allocation**: ₹2,200,000 INR
-*   **Action Plan**: Enhance utility coverage, distribute essential equipment, and run public awareness campaigns.
-*   **Timeline**: 9–12 months
-
-#### 📍 Initiative 3: ${lowestSectors[2].name} Sector Intervention
-*   **Target Strategy**: Operations optimization and digital infrastructure.
-*   **Budget Allocation**: ₹1,800,000 INR
-*   **Action Plan**: Roll out digital tracking portals and set up local oversight committees to verify output milestones.
-*   **Timeline**: 12–18 months`;
-
-    return res.json({
-      success: true,
-      provider: "rule-engine-fallback",
-      recommendations: offlineText
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to compile recommendations." });
-  }
-});
 
 // ── GET /api/rankings ──────────────────────────────────────────────────
 // Paginated, sortable, filterable village rankings
@@ -494,6 +368,253 @@ app.get("/api/villages/:id", (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── GET /api/villages/:id/history ──────────────────────────────────────
+// Retrieves multi-year development trajectory for a specific village
+app.get("/api/villages/:id/history", (req, res) => {
+  try {
+    const id = safeInt(req.params.id, 0);
+
+    // Fetch historical scores
+    const history = db.prepare(`
+      SELECT year, economy_score, education_score, health_score,
+             infrastructure_score, environment_score, governance_score,
+             social_score, overall_score
+      FROM historical_scores
+      WHERE village_id = ?
+      ORDER BY year ASC
+    `).all(id);
+
+    // Fetch current scores as the 2026 anchor point
+    const current = db.prepare(`
+      SELECT 2026 as year, economy_score, education_score, health_score,
+             infrastructure_score, environment_score, governance_score,
+             social_score, overall_score
+      FROM domain_scores
+      WHERE village_id = ?
+    `).get(id);
+
+    if (current) {
+      history.push(current);
+    }
+
+    res.json({ success: true, history });
+  } catch (err) {
+    console.error("Village history error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/villages/:id/recommendations ──────────────────────────────
+// Generates localized policy recommendations using Gemini (with offline fallback)
+app.post("/api/villages/:id/recommendations", async (req, res) => {
+  try {
+    const id = safeInt(req.params.id, 0);
+
+    const village = db.prepare(`
+      SELECT v.village_name, v.district, v.state, v.total_population,
+             d.economy_score, d.education_score, d.health_score,
+             d.infrastructure_score, d.environment_score,
+             d.governance_score, d.social_score, d.overall_score
+      FROM villages v
+      JOIN domain_scores d ON v.village_id = d.village_id
+      WHERE v.village_id = ?
+    `).get(id);
+
+    if (!village) {
+      return res.status(404).json({ error: "Village not found" });
+    }
+
+    const domains = [
+      { name: "Economy", score: village.economy_score, key: "economy" },
+      { name: "Education", score: village.education_score, key: "education" },
+      { name: "Health", score: village.health_score, key: "health" },
+      { name: "Infrastructure", score: village.infrastructure_score, key: "infrastructure" },
+      { name: "Environment", score: village.environment_score, key: "environment" },
+      { name: "Governance", score: village.governance_score, key: "governance" },
+      { name: "Social", score: village.social_score, key: "social" }
+    ];
+
+    domains.sort((a, b) => a.score - b.score);
+    const bottlenecks = domains.slice(0, 3);
+
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (apiKey) {
+      const prompt = `You are a development policy consultant. Analyze the following Indian village profile and propose actionable development recommendations.
+
+Village: ${village.village_name}
+District: ${village.district}
+State: ${village.state}
+Total Population: ${village.total_population?.toLocaleString() ?? "N/A"}
+
+Current Development Domain Scores (out of 100):
+${domains.map(d => `- ${d.name}: ${d.score.toFixed(1)}`).join("\n")}
+
+Identify the top 2-3 bottleneck domains (which are: ${bottlenecks.map(b => `${b.name} (${b.score.toFixed(1)})`).join(", ")}).
+Provide concrete, practical, and highly actionable policy recommendations. Align your recommendations with existing government schemes in India (e.g., Jal Jeevan Mission, Samagra Shiksha, National Health Mission, MGNREGA, PMGSY, PM-JAY, Swachh Bharat Mission).
+Keep your response concise, professional, structured in clear Markdown, using headers, bullet points, and bold text. Do not use conversational filler. Make it ready to print.`;
+
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        });
+
+        const data = await response.json();
+        if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
+          const text = data.candidates[0].content.parts[0].text;
+          return res.json({ success: true, method: "gemini", recommendations: text });
+        } else {
+          console.warn("Gemini API response format invalid or quota exceeded. Falling back to local engine.");
+        }
+      } catch (geminiErr) {
+        console.error("Gemini API call failed:", geminiErr.message);
+      }
+    }
+
+    // Local Fallback Generator
+    let recommendations = `### 📋 Development Policy Report for **${village.village_name}**
+**Location**: ${village.district}, ${village.state} | **Population**: ${village.total_population?.toLocaleString() ?? "N/A"}
+
+Below is a tailored development plan based on the lowest scoring domains identified in the V-Connect system.
+
+---
+
+`;
+
+    bottlenecks.forEach((b, index) => {
+      recommendations += `#### ${index + 1}. Focus Area: **${b.name}** (Score: ${b.score.toFixed(1)}/100)\n`;
+      if (b.key === "infrastructure") {
+        recommendations += `- **Scheme Alignment**: *Jal Jeevan Mission* & *Swachh Bharat Mission (Grameen)*\n`;
+        recommendations += `- **Intervention**: Expand piped drinking water taps and execute solid/liquid waste management infrastructure in public spaces.\n`;
+        recommendations += `- **Action Item**: Implement concrete village drainage networks and upgrade electricity grid substations to ensure at least 18+ hours of daily power supply.\n\n`;
+      } else if (b.key === "education") {
+        recommendations += `- **Scheme Alignment**: *Samagra Shiksha Abhiyan* & *PM SHRI Schools*\n`;
+        recommendations += `- **Intervention**: Launch school dropout reduction campaigns, targeting female students. Improve digital infrastructure in schools.\n`;
+        recommendations += `- **Action Item**: Establish a community computer lab and launch evening vocational training programs to improve youth employment literacy.\n\n`;
+      } else if (b.key === "health") {
+        recommendations += `- **Scheme Alignment**: *National Health Mission (NHM)* & *Ayushman Bharat (PM-JAY)*\n`;
+        recommendations += `- **Intervention**: Resolve health service isolation by scheduling monthly mobile medical camps and upgrading local primary health sub-centers.\n`;
+        recommendations += `- **Action Item**: Reinforce child nutrition trackers via local Anganwadis to address the malnutrition rates effectively.\n\n`;
+      } else if (b.key === "economy") {
+        recommendations += `- **Scheme Alignment**: *MGNREGA* & *Deendayal Antyodaya Yojana (DAY-NRLM)*\n`;
+        recommendations += `- **Intervention**: Drive non-farm micro-enterprise programs and establish micro-credit linkages through Self-Help Groups (SHGs).\n`;
+        recommendations += `- **Action Item**: Create an agricultural cooperative collection point to give farmers direct access to nearby markets, cutting out intermediate traders.\n\n`;
+      } else if (b.key === "environment") {
+        recommendations += `- **Scheme Alignment**: *National Disaster Management Plan* & *Green India Mission*\n`;
+        recommendations += `- **Intervention**: Formulate community disaster response teams and establish storm/flood shelter maps.\n`;
+        recommendations += `- **Action Item**: Carry out community afforestation drives and run groundwater recharge/rainwater harvesting projects.\n\n`;
+      } else if (b.key === "governance") {
+        recommendations += `- **Scheme Alignment**: *e-Panchayat Mission Mode Project*\n`;
+        recommendations += `- **Intervention**: Digitize Gram Panchayat records and set up digital citizen kiosks for transparency.\n`;
+        recommendations += `- **Action Item**: Hold regular open-floor *Gram Sabhas* to review budget fund utilization and citizen grievances directly.\n\n`;
+      } else if (b.key === "social") {
+        recommendations += `- **Scheme Alignment**: *National Youth Policy* & *Mahila Shakti Kendra*\n`;
+        recommendations += `- **Intervention**: Build community youth recreation spaces and setup local dispute mediation boards to encourage social cohesion.\n`;
+        recommendations += `- **Action Item**: Implement female-led watch programs and organize vocational skill workshops specifically for youth.\n\n`;
+      }
+    });
+
+    recommendations += `---
+*Note: This policy brief was generated automatically by the V-Connect local policy analysis engine as the Gemini AI key was not active.*`;
+
+    res.json({ success: true, method: "local", recommendations });
+  } catch (err) {
+    console.error("Recommendations error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/admin/data-quality ────────────────────────────────────────
+// Analyzes database records for anomalies, range errors, and integrity scoring
+app.get("/api/admin/data-quality", (req, res) => {
+  try {
+    const totalVillagesRow = db.prepare("SELECT COUNT(*) as count FROM villages").get();
+    const total = totalVillagesRow.count || 1;
+
+    // 1. Coordinates anomaly (outside India boundaries)
+    const coordAnomalyRow = db.prepare(`
+      SELECT COUNT(*) as count FROM villages 
+      WHERE (latitude IS NOT NULL AND longitude IS NOT NULL)
+        AND (latitude < 6.0 OR latitude > 38.0 OR longitude < 68.0 OR longitude > 98.0)
+    `).get();
+    const coordAnomalies = db.prepare(`
+      SELECT village_id, village_name, district, state, latitude, longitude FROM villages 
+      WHERE (latitude IS NOT NULL AND longitude IS NOT NULL)
+        AND (latitude < 6.0 OR latitude > 38.0 OR longitude < 68.0 OR longitude > 98.0)
+      LIMIT 5
+    `).all();
+
+    // 2. Demographic anomaly (zero or null population/households)
+    const demoAnomalyRow = db.prepare(`
+      SELECT COUNT(*) as count FROM villages 
+      WHERE total_population IS NULL OR total_population <= 0 OR households IS NULL OR households < 0
+    `).get();
+    const demoAnomalies = db.prepare(`
+      SELECT village_id, village_name, district, state, total_population, households FROM villages 
+      WHERE total_population IS NULL OR total_population <= 0 OR households IS NULL OR households < 0
+      LIMIT 5
+    `).all();
+
+    // 3. Metric anomaly (percentages out of bounds)
+    const pctAnomalyRow = db.prepare(`
+      SELECT COUNT(*) as count FROM villages 
+      WHERE drinking_water_coverage_pct < 0 OR drinking_water_coverage_pct > 100
+         OR sanitation_coverage_pct < 0 OR sanitation_coverage_pct > 100
+         OR [internet_penetration%] < 0 OR [internet_penetration%] > 100
+    `).get();
+    const pctAnomalies = db.prepare(`
+      SELECT village_id, village_name, drinking_water_coverage_pct, sanitation_coverage_pct, [internet_penetration%] FROM villages 
+      WHERE drinking_water_coverage_pct < 0 OR drinking_water_coverage_pct > 100
+         OR sanitation_coverage_pct < 0 OR sanitation_coverage_pct > 100
+         OR [internet_penetration%] < 0 OR [internet_penetration%] > 100
+      LIMIT 5
+    `).all();
+
+    // 4. Extreme Hospital Distance Outliers (>50km)
+    const hospAnomalyRow = db.prepare(`
+      SELECT COUNT(*) as count FROM villages 
+      WHERE nearest_hospital_distance_km > 50.0
+    `).get();
+    const hospAnomalies = db.prepare(`
+      SELECT village_id, village_name, district, state, nearest_hospital_distance_km FROM villages 
+      WHERE nearest_hospital_distance_km > 50.0
+      LIMIT 5
+    `).all();
+
+    // Calculate database integrity score
+    const totalAnomalousPoints = coordAnomalyRow.count + demoAnomalyRow.count + pctAnomalyRow.count + hospAnomalyRow.count;
+    const errorRate = totalAnomalousPoints / (total * 4); // 4 dimensions checked
+    const healthScore = Math.max(0, Math.min(100, Number((100 - (errorRate * 100)).toFixed(2))));
+
+    res.json({
+      success: true,
+      stats: {
+        totalVillages: total,
+        healthScore,
+        coordAnomalyCount: coordAnomalyRow.count,
+        demoAnomalyCount: demoAnomalyRow.count,
+        pctAnomalyCount: pctAnomalyRow.count,
+        hospAnomalyCount: hospAnomalyRow.count,
+        totalAnomalies: totalAnomalousPoints
+      },
+      anomalies: {
+        coordinates: coordAnomalies,
+        demographics: demoAnomalies,
+        percentages: pctAnomalies,
+        hospitalDistances: hospAnomalies
+      }
+    });
+  } catch (err) {
+    console.error("Data quality audit error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // ── GET /api/simulate-rank ─────────────────────────────────────────────
 // Estimate national rank for a given overall score
