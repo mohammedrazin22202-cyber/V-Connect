@@ -19,6 +19,26 @@ const DB_PATH = path.join(__dirname, "vconnect.db");
 app.use(cors());
 app.use(express.json());
 
+// ── Historical Scores Database Schema Setup ─────────────────────────────
+function initializeHistoricalScores() {
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS historical_scores (
+      village_id INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      economy_score REAL,
+      education_score REAL,
+      health_score REAL,
+      infrastructure_score REAL,
+      environment_score REAL,
+      governance_score REAL,
+      social_score REAL,
+      overall_score REAL,
+      PRIMARY KEY (village_id, year),
+      FOREIGN KEY (village_id) REFERENCES villages(village_id)
+    )
+  `).run();
+}
+
 // ── Database Connection ────────────────────────────────────────────────
 let db;
 try {
