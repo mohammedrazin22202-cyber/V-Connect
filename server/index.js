@@ -19,7 +19,7 @@ const DB_PATH = path.join(__dirname, "vconnect.db");
 app.use(cors());
 app.use(express.json());
 
-// ── Historical Scores Database Schema Setup ─────────────────────────────
+// ── Historical Scores Database Initialization & Seeding ──────────────
 function initializeHistoricalScores() {
   db.prepare(`
     CREATE TABLE IF NOT EXISTS historical_scores (
@@ -37,6 +37,71 @@ function initializeHistoricalScores() {
       FOREIGN KEY (village_id) REFERENCES villages(village_id)
     )
   `).run();
+
+  const countRow = db.prepare("SELECT COUNT(*) as count FROM historical_scores").get();
+  if (countRow.count > 0) {
+    console.log("✓ historical_scores table verified (already seeded)");
+    return;
+  }
+
+  console.log("⚙️ historical_scores table empty. Starting self-seeding routine...");
+  const t0 = Date.now();
+
+  const domainScores = db.prepare("SELECT * FROM domain_scores").all();
+  if (domainScores.length === 0) {
+    console.log("⚠️ domain_scores table is empty. Seeding skipped.");
+    return;
+  }
+
+  const insertStmt = db.prepare(`
+    INSERT INTO historical_scores (
+      village_id, year, economy_score, education_score, health_score,
+      infrastructure_score, environment_score, governance_score, social_score, overall_score
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const runSeedingTransaction = db.transaction((records) => {
+    for (const r of records) {
+      insertStmt.run(r);
+    }
+  });
+
+  const years = [2023, 2024, 2025];
+  const recordsToInsert = [];
+
+  for (const ds of domainScores) {
+    const vId = ds.village_id;
+
+    for (const yr of years) {
+      const yearMultiplier = (yr - 2026) * 0.95; 
+      
+      const economy_score = Math.max(0, Math.min(100, ds.economy_score + (Math.random() * 6 - 3.5) + yearMultiplier));
+      const education_score = Math.max(0, Math.min(100, ds.education_score + (Math.random() * 6 - 3.5) + yearMultiplier));
+      const health_score = Math.max(0, Math.min(100, ds.health_score + (Math.random() * 6 - 3.5) + yearMultiplier));
+      const infrastructure_score = Math.max(0, Math.min(100, ds.infrastructure_score + (Math.random() * 6 - 3.5) + yearMultiplier));
+      const environment_score = Math.max(0, Math.min(100, ds.environment_score + (Math.random() * 6 - 3.5) + yearMultiplier));
+      const governance_score = Math.max(0, Math.min(100, ds.governance_score + (Math.random() * 6 - 3.5) + yearMultiplier));
+      const social_score = Math.max(0, Math.min(100, ds.social_score + (Math.random() * 6 - 3.5) + yearMultiplier));
+
+      const overall_score = Math.max(0, Math.min(100, (
+        economy_score + education_score + health_score +
+        infrastructure_score + environment_score + governance_score + social_score
+      ) / 7));
+
+      recordsToInsert.push([
+        vId, yr, economy_score, education_score, health_score,
+        infrastructure_score, environment_score, governance_score, social_score, overall_score
+      ]);
+    }
+  }
+
+  const CHUNK_SIZE = 5000;
+  for (let i = 0; i < recordsToInsert.length; i += CHUNK_SIZE) {
+    const chunk = recordsToInsert.slice(i, i + CHUNK_SIZE);
+    runSeedingTransaction(chunk);
+  }
+
+  console.log(`✓ Seeded ${recordsToInsert.length.toLocaleString()} historical score entries across ${years.length} years (${Date.now() - t0}ms)`);
 }
 
 // ── Database Connection ────────────────────────────────────────────────
