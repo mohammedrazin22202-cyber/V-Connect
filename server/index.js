@@ -185,6 +185,102 @@ app.get("/api/villages/:id/history", (req, res) => {
   }
 });
 
+// ── POST /api/villages/:id/recommendations ─────────────────────────────────
+app.post("/api/villages/:id/recommendations", async (req, res) => {
+  const villageId = safeInt(req.params.id, null);
+  if (!villageId) {
+    return res.status(400).json({ error: "Invalid village ID" });
+  }
+  try {
+    const village = db.prepare("SELECT * FROM villages WHERE village_id = ?").get(villageId);
+    const scores = db.prepare("SELECT * FROM domain_scores WHERE village_id = ?").get(villageId);
+    
+    if (!village || !scores) {
+      return res.status(404).json({ error: "Village data not found." });
+    }
+
+    const sectors = [
+      { name: "Economy", score: scores.economy_score },
+      { name: "Education", score: scores.education_score },
+      { name: "Health", score: scores.health_score },
+      { name: "Infrastructure", score: scores.infrastructure_score },
+      { name: "Environment", score: scores.environment_score },
+      { name: "Governance", score: scores.governance_score },
+      { name: "Social Cohesion", score: scores.social_score }
+    ];
+    
+    sectors.sort((a, b) => a.score - b.score);
+    const lowestSectors = sectors.slice(0, 3);
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey) {
+      try {
+        const prompt = `Generate a structured rural development policy plan for ${village.village_name} village, situated in ${village.district} district, ${village.state} state.
+Demographics: Population of ${village.total_population?.toLocaleString()} across ${village.households?.toLocaleString()} households.
+Current developmental deficit scores (out of 100):
+${sectors.map(s => `- ${s.name}: ${s.score?.toFixed(1)}`).join('\n')}
+
+The three lowest sectors requiring critical action are:
+${lowestSectors.map(s => `- ${s.name} (Score: ${s.score?.toFixed(1)})`).join('\n')}
+
+Provide exactly three strategic policy initiatives corresponding to the lowest sectors. Focus on budget estimations (INR), expected output targets, and timeline milestones. Print in standard GitHub Markdown format. Keep the proposal practical and highly actionable.`;
+
+        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        });
+        
+        const responseData = await geminiRes.json();
+        if (responseData.candidates && responseData.candidates[0]?.content?.parts[0]?.text) {
+          return res.json({
+            success: true,
+            provider: "gemini",
+            recommendations: responseData.candidates[0].content.parts[0].text
+          });
+        }
+      } catch (geminiError) {
+        console.warn("⚠️ Gemini API execution failed. Engaging rule-based offline generator fallback.", geminiError.message);
+      }
+    }
+
+    const offlineText = `### 📋 Offline Development Strategy for **${village.village_name}**
+#### Deficit Sector Priorities: ${lowestSectors.map(s => s.name).join(', ')}
+
+---
+
+#### 📍 Initiative 1: ${lowestSectors[0].name} Sector Intervention
+*   **Target Strategy**: Infrastructure and process upgrades to improve current index of **${lowestSectors[0].score?.toFixed(1)}**.
+*   **Budget Allocation**: ₹3,500,000 INR
+*   **Action Plan**: Establish community resource hubs and implement specialized training to support local capacity building.
+*   **Timeline**: 6–9 months
+
+#### 📍 Initiative 2: ${lowestSectors[1].name} Sector Intervention
+*   **Target Strategy**: Sectoral integration and facility expansion.
+*   **Budget Allocation**: ₹2,200,000 INR
+*   **Action Plan**: Enhance utility coverage, distribute essential equipment, and run public awareness campaigns.
+*   **Timeline**: 9–12 months
+
+#### 📍 Initiative 3: ${lowestSectors[2].name} Sector Intervention
+*   **Target Strategy**: Operations optimization and digital infrastructure.
+*   **Budget Allocation**: ₹1,800,000 INR
+*   **Action Plan**: Roll out digital tracking portals and set up local oversight committees to verify output milestones.
+*   **Timeline**: 12–18 months`;
+
+    return res.json({
+      success: true,
+      provider: "rule-engine-fallback",
+      recommendations: offlineText
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to compile recommendations." });
+  }
+});
+
 // ── GET /api/rankings ──────────────────────────────────────────────────
 // Paginated, sortable, filterable village rankings
 app.get("/api/rankings", (req, res) => {
