@@ -154,6 +154,37 @@ function safeInt(val, fallback) {
   return isNaN(n) ? fallback : n;
 }
 
+// ── GET /api/villages/:id/history ──────────────────────────────────────
+app.get("/api/villages/:id/history", (req, res) => {
+  const villageId = safeInt(req.params.id, null);
+  if (!villageId) {
+    return res.status(400).json({ error: "Invalid village ID" });
+  }
+  try {
+    const history = db.prepare("SELECT * FROM historical_scores WHERE village_id = ? ORDER BY year ASC").all(villageId);
+    const anchor = db.prepare("SELECT * FROM domain_scores WHERE village_id = ?").get(villageId);
+    
+    if (anchor) {
+      history.push({
+        village_id: anchor.village_id,
+        year: 2026,
+        economy_score: anchor.economy_score,
+        education_score: anchor.education_score,
+        health_score: anchor.health_score,
+        infrastructure_score: anchor.infrastructure_score,
+        environment_score: anchor.environment_score,
+        governance_score: anchor.governance_score,
+        social_score: anchor.social_score,
+        overall_score: anchor.overall_score
+      });
+    }
+    res.json({ success: true, history });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to retrieve historical scores from engine." });
+  }
+});
+
 // ── GET /api/rankings ──────────────────────────────────────────────────
 // Paginated, sortable, filterable village rankings
 app.get("/api/rankings", (req, res) => {
