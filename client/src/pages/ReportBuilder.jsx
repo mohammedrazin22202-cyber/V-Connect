@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchRankings, fetchVillage } from '../api';
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { fetchRankings, fetchVillage, fetchVillageHistory, fetchVillageRecommendations } from '../api';
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
 const DOMAIN_LABELS = {
   economy_score: 'Economy',
@@ -31,12 +31,20 @@ export default function ReportBuilder() {
   const [villageData, setVillageData] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // History and AI recommendations states
+  const [history, setHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [aiRecommendations, setAiRecommendations] = useState('');
+  const [loadingAi, setLoadingAi] = useState(false);
+  const [aiError, setAiError] = useState(null);
+
   // Configuration switches
   const [incDemographics, setIncDemographics] = useState(true);
   const [incScoresRadar, setIncScoresRadar] = useState(true);
   const [incGapsList, setIncGapsList] = useState(true);
   const [incBudgetPie, setIncBudgetPie] = useState(true);
   const [incRecommendations, setIncRecommendations] = useState(true);
+  const [incHistoryTimeline, setIncHistoryTimeline] = useState(true);
 
   // Fetch search results
   useEffect(() => {
@@ -65,7 +73,38 @@ export default function ReportBuilder() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    setLoadingHistory(true);
+    fetchVillageHistory(selectedVillageId)
+      .then(res => {
+        if (res.success) {
+          setHistory(res.history || []);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoadingHistory(false));
+
+    setAiRecommendations('');
+    setAiError(null);
   }, [selectedVillageId]);
+
+  const handleGenerateRecommendations = async () => {
+    if (!selectedVillageId) return;
+    setLoadingAi(true);
+    setAiError(null);
+    try {
+      const res = await fetchVillageRecommendations(selectedVillageId);
+      if (res.success) {
+        setAiRecommendations(res.recommendations);
+      } else {
+        setAiError(res.error || "Failed to generate recommendations.");
+      }
+    } catch (err) {
+      console.error(err);
+      setAiError("Network error generating recommendations.");
+    }
+    setLoadingAi(false);
+  };
 
   const radarData = useMemo(() => {
     if (!villageData || !villageData.village) return [];
@@ -232,9 +271,28 @@ export default function ReportBuilder() {
               <input type="checkbox" checked={incRecommendations} onChange={e => setIncRecommendations(e.target.checked)} id="toggle-recs" />
               Administrative Policy Guidelines
             </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={incHistoryTimeline} onChange={e => setIncHistoryTimeline(e.target.checked)} id="toggle-history" />
+              Historical Score Trajectory
+            </label>
           </div>
+          
+          {selectedVillageId && (
+            <div style={{ marginTop: '16px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold' }}>AI Recommendations</h4>
+              <button
+                className="btn btn--primary"
+                onClick={handleGenerateRecommendations}
+                disabled={loadingAi}
+                style={{ width: '100%', fontSize: '12px', padding: '8px', cursor: 'pointer' }}
+                id="generate-ai-recs-btn"
+              >
+                {loadingAi ? 'Generating...' : aiRecommendations ? '🔄 Regenerate AI Plan' : '✨ Generate AI Plan'}
+              </button>
+              {aiError && <p style={{ color: 'var(--danger)', fontSize: '11px', marginTop: '6px', margin: '6px 0 0 0' }}>{aiError}</p>}
+            </div>
+          )}
         </div>
-
       </div>
 
       {/* Report preview document panel */}
@@ -403,27 +461,62 @@ export default function ReportBuilder() {
             </div>
           )}
 
+          {/* Historical Scores Time-Series */}
+          {incHistoryTimeline && history.length > 0 && (
+            <div style={{ marginBottom: '24px', pageBreakInside: 'avoid' }}>
+              <h2 style={{ fontSize: '14px', textTransform: 'uppercase', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', color: '#0f172a', marginBottom: '12px' }}>
+                Historical Development Trends
+              </h2>
+              <div style={{ width: '100%', height: '140px' }} className="no-print-chart">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={history} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
+                    <XAxis dataKey="year" tick={{ fill: '#334155', fontSize: 8 }} />
+                    <YAxis domain={[0, 100]} tick={{ fill: '#334155', fontSize: 8 }} />
+                    <Line type="monotone" dataKey="overall_score" name="Overall" stroke="#1e3a8a" strokeWidth={2} activeDot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="economy_score" name="Economy" stroke="#f59e0b" strokeWidth={1} strokeDasharray="3 3" />
+                    <Line type="monotone" dataKey="education_score" name="Education" stroke="#8b5cf6" strokeWidth={1} strokeDasharray="3 3" />
+                    <Line type="monotone" dataKey="health_score" name="Health" stroke="#ef4444" strokeWidth={1} strokeDasharray="3 3" />
+                    <Line type="monotone" dataKey="infrastructure_score" name="Infra" stroke="#06b6d4" strokeWidth={1} strokeDasharray="3 3" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
           {/* Policy recommendations and guidelines */}
           {incRecommendations && (
-            <div style={{ marginBottom: '10px', borderTop: '2px dashed #cbd5e1', paddingTop: '16px' }}>
+            <div style={{ marginBottom: '10px', borderTop: '2px dashed #cbd5e1', paddingTop: '16px', pageBreakInside: 'avoid' }}>
               <h2 style={{ fontSize: '14px', textTransform: 'uppercase', color: '#0f172a', marginBottom: '8px' }}>
                 Administrative Action Guidelines
               </h2>
-              <ul style={{ fontSize: '11px', color: '#334155', paddingLeft: '20px', lineHeight: '1.6', margin: 0 }}>
-                {villageData.village.priority_level === 'Critical' || villageData.village.priority_level === 'High' ? (
-                  <>
-                    <li><strong>Immediate Action Required</strong>: Trigger emergency health support and clean drinking water pipeline installations.</li>
-                    <li><strong>Financial Oversight</strong>: Route scheme budgets directly to Gram Panchayat fund trackers to avoid leaks.</li>
-                    <li><strong>Educational Audit</strong>: Address school dropout numbers by organizing digital literacy drives.</li>
-                  </>
-                ) : (
-                  <>
-                    <li><strong>Development Maintenance</strong>: Periodically check sanitation index counts to sustain high scores.</li>
-                    <li><strong>MSME Engagement</strong>: Extend credit availability scores to rural household farmers.</li>
-                  </>
-                )}
-                <li><strong>Local Contact Officer</strong>: Sub-District Block Officer, {villageData.village.block || 'District Headquarters'}.</li>
-              </ul>
+              
+              {aiRecommendations ? (
+                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginBottom: '10px' }} className="ai-recs-content">
+                  {renderMarkdown(aiRecommendations)}
+                </div>
+              ) : (
+                <div style={{ marginBottom: '12px' }}>
+                  <p style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic', margin: '0 0 10px 0' }}>
+                    * Custom AI development guidelines are ready. Click "Generate AI Plan" in the left-hand sidebar panel to query recommendations.
+                  </p>
+                  <ul style={{ fontSize: '11px', color: '#334155', paddingLeft: '20px', lineHeight: '1.6', margin: 0 }}>
+                    {villageData.village.priority_level === 'Critical' || villageData.village.priority_level === 'High' ? (
+                      <>
+                        <li><strong>Immediate Action Required</strong>: Trigger emergency health support and clean drinking water pipeline installations.</li>
+                        <li><strong>Financial Oversight</strong>: Route scheme budgets directly to Gram Panchayat fund trackers to avoid leaks.</li>
+                        <li><strong>Educational Audit</strong>: Address school dropout numbers by organizing digital literacy drives.</li>
+                      </>
+                    ) : (
+                      <>
+                        <li><strong>Development Maintenance</strong>: Periodically check sanitation index counts to sustain high scores.</li>
+                        <li><strong>MSME Engagement</strong>: Extend credit availability scores to rural household farmers.</li>
+                      </>
+                    )}
+                    <li><strong>Local Contact Officer</strong>: Sub-District Block Officer, {villageData.village.block || 'District Headquarters'}.</li>
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
@@ -447,3 +540,35 @@ export default function ReportBuilder() {
     </div>
   );
 }
+
+// Simple local markdown parser helper
+function renderMarkdown(md) {
+  if (!md) return null;
+  return md.split('\n').map((line, i) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('###')) {
+      return <h3 key={i} style={{ fontSize: '13px', color: '#0f172a', marginTop: '12px', marginBottom: '6px', fontWeight: 'bold' }}>{trimmed.replace(/^###\s*/, '')}</h3>;
+    }
+    if (trimmed.startsWith('####')) {
+      return <h4 key={i} style={{ fontSize: '12px', color: '#1e3a8a', marginTop: '10px', marginBottom: '4px', fontWeight: 'bold' }}>{trimmed.replace(/^####\s*/, '')}</h4>;
+    }
+    if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
+      return <p key={i} style={{ fontSize: '11px', margin: '4px 0', fontWeight: 'bold', color: '#0f172a' }}>{trimmed.replace(/\*\*/g, '')}</p>;
+    }
+    if (trimmed.startsWith('-')) {
+      const parts = trimmed.replace(/^-\s*/, '').split('**');
+      const content = parts.map((part, idx) => idx % 2 === 1 ? <strong key={idx} style={{ color: '#0f172a' }}>{part}</strong> : part);
+      return <li key={i} style={{ fontSize: '11px', color: '#334155', marginLeft: '12px', marginBottom: '4px', lineHeight: '1.5' }}>{content}</li>;
+    }
+    if (trimmed === '---') {
+      return <hr key={i} style={{ border: '0', borderTop: '1px dashed #cbd5e1', margin: '12px 0' }} />;
+    }
+    if (!trimmed) {
+      return <div key={i} style={{ height: '6px' }} />;
+    }
+    const parts = trimmed.split('**');
+    const content = parts.map((part, idx) => idx % 2 === 1 ? <strong key={idx} style={{ color: '#0f172a' }}>{part}</strong> : part);
+    return <p key={i} style={{ fontSize: '11px', margin: '4px 0', lineHeight: '1.5', color: '#334155' }}>{content}</p>;
+  });
+}
+
