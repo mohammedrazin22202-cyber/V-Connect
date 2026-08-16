@@ -5,6 +5,7 @@ const navItems = [
   { path: '/', label: 'Rankings', icon: '📊' },
   { path: '/compare', label: 'State Comparison', icon: '🗺️' },
   { path: '/compare-villages', label: 'Village Comparison', icon: '🏘️' },
+  { path: '/amenities', label: 'Amenities Tracker', icon: '🚰' },
   { path: '/sandbox', label: 'Policy Sandbox', icon: '🧪' },
   { path: '/analytics', label: 'Spatial Analytics', icon: '🌍' },
   { path: '/predictive', label: 'Predictive Analytics', icon: '🔮' },
