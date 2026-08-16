@@ -4,6 +4,7 @@ import RankingDashboard from './pages/RankingDashboard';
 import VillageDetail from './pages/VillageDetail';
 import StateComparison from './pages/StateComparison';
 import VillageComparison from './pages/VillageComparison';
+import AmenitiesTracker from './pages/AmenitiesTracker';
 import PolicySandbox from './pages/PolicySandbox';
 import SpatialAnalytics from './pages/SpatialAnalytics';
 import PredictiveSandbox from './pages/PredictiveSandbox';
@@ -42,6 +43,7 @@ function App() {
             <Route path="/village/:id" element={<VillageDetail />} />
             <Route path="/compare" element={<StateComparison />} />
             <Route path="/compare-villages" element={<VillageComparison />} />
+            <Route path="/amenities" element={<AmenitiesTracker />} />
             <Route path="/sandbox" element={<PolicySandbox />} />
             <Route path="/analytics" element={<SpatialAnalytics />} />
             <Route path="/predictive" element={<PredictiveSandbox />} />
