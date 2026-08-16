@@ -304,6 +304,191 @@ app.get("/api/rankings", (req, res) => {
   }
 });
 
+// ── GET /api/villages/amenities-status ─────────────────────────────────
+// Get coverage and fulfillment status of basic amenities across villages
+app.get("/api/villages/amenities-status", (req, res) => {
+  try {
+    const cacheKey = req.originalUrl;
+    const cached = getCachedResponse(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const page = Math.max(1, safeInt(req.query.page, 1));
+    const limit = Math.min(100, Math.max(1, safeInt(req.query.limit, 25)));
+    const offset = (page - 1) * limit;
+
+    // Thresholds
+    const water_t = parseFloat(req.query.water_t ?? 90);
+    const sanitation_t = parseFloat(req.query.sanitation_t ?? 90);
+    const electricity_t = parseFloat(req.query.electricity_t ?? 16);
+    const school_t = parseFloat(req.query.school_t ?? 1);
+    const hospital_t = parseFloat(req.query.hospital_t ?? 10);
+    const road_t = parseFloat(req.query.road_t ?? 60);
+    const internet_t = parseFloat(req.query.internet_t ?? 45);
+
+    // Filters
+    const conditions = [];
+    const params = [];
+
+    if (req.query.state) {
+      conditions.push("v.state = ?");
+      params.push(req.query.state);
+    }
+    if (req.query.district) {
+      conditions.push("v.district = ?");
+      params.push(req.query.district);
+    }
+    if (req.query.search) {
+      conditions.push("v.village_name LIKE ?");
+      params.push(`%${req.query.search}%`);
+    }
+
+    // Missing features filter (comma separated, e.g. "water,electricity")
+    if (req.query.missing) {
+      const missingList = req.query.missing.split(",");
+      missingList.forEach(m => {
+        if (m === "water") conditions.push(`v.drinking_water_coverage_pct < ${water_t}`);
+        if (m === "sanitation") conditions.push(`v.sanitation_coverage_pct < ${sanitation_t}`);
+        if (m === "electricity") conditions.push(`v.electricity_hours_per_day < ${electricity_t}`);
+        if (m === "school") conditions.push(`v.school_count < ${school_t}`);
+        if (m === "hospital") conditions.push(`v.nearest_hospital_distance_km > ${hospital_t}`);
+        if (m === "road") conditions.push(`v.road_quality_index < ${road_t}`);
+        if (m === "internet") conditions.push(`v.[internet_penetration%] < ${internet_t}`);
+      });
+    }
+
+    // Fulfillment status filter: 'all', 'lacking', 'any'
+    if (req.query.fulfillment === "all") {
+      conditions.push(`v.drinking_water_coverage_pct >= ${water_t}`);
+      conditions.push(`v.sanitation_coverage_pct >= ${sanitation_t}`);
+      conditions.push(`v.electricity_hours_per_day >= ${electricity_t}`);
+      conditions.push(`v.school_count >= ${school_t}`);
+      conditions.push(`v.nearest_hospital_distance_km <= ${hospital_t}`);
+      conditions.push(`v.road_quality_index >= ${road_t}`);
+      conditions.push(`v.[internet_penetration%] >= ${internet_t}`);
+    } else if (req.query.fulfillment === "lacking") {
+      conditions.push(`(
+        v.drinking_water_coverage_pct < ${water_t} OR
+        v.sanitation_coverage_pct < ${sanitation_t} OR
+        v.electricity_hours_per_day < ${electricity_t} OR
+        v.school_count < ${school_t} OR
+        v.nearest_hospital_distance_km > ${hospital_t} OR
+        v.road_quality_index < ${road_t} OR
+        v.[internet_penetration%] < ${internet_t}
+      )`);
+    }
+
+    const whereClause = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
+
+    // 1. Fetch count query
+    const countQuery = `
+      SELECT COUNT(*) as count 
+      FROM villages v
+      ${whereClause}
+    `;
+    const totalRow = db.prepare(countQuery).get(params);
+    const total = totalRow ? totalRow.count : 0;
+
+    // 2. Fetch data list query
+    const sortBy = req.query.sort_by || "overall_rank";
+    const order = req.query.order === "desc" ? "DESC" : "ASC";
+    const validSorts = ["village_name", "state", "district", "overall_rank", "overall_score", "total_population"];
+    const sortCol = validSorts.includes(sortBy) ? sortBy : "overall_rank";
+
+    const dataQuery = `
+      SELECT 
+        v.village_id, v.village_name, v.district, v.state, v.total_population,
+        v.drinking_water_coverage_pct, v.sanitation_coverage_pct, v.electricity_hours_per_day,
+        v.school_count, v.nearest_hospital_distance_km, v.road_quality_index, v.[internet_penetration%] AS [internet_penetration%],
+        d.overall_score, d.overall_rank,
+        (v.drinking_water_coverage_pct >= ${water_t}) AS has_water,
+        (v.sanitation_coverage_pct >= ${sanitation_t}) AS has_sanitation,
+        (v.electricity_hours_per_day >= ${electricity_t}) AS has_electricity,
+        (v.school_count >= ${school_t}) AS has_school,
+        (v.nearest_hospital_distance_km <= ${hospital_t}) AS has_hospital,
+        (v.road_quality_index >= ${road_t}) AS has_road,
+        (v.[internet_penetration%] >= ${internet_t}) AS has_internet
+      FROM villages v
+      JOIN domain_scores d ON v.village_id = d.village_id
+      ${whereClause}
+      ORDER BY ${sortCol === "overall_score" || sortCol === "overall_rank" ? "d." + sortCol : "v." + sortCol} ${order}
+      LIMIT ? OFFSET ?
+    `;
+
+    const queryParams = [...params, limit, offset];
+    const rows = db.prepare(dataQuery).all(queryParams);
+
+    // 3. Fetch aggregate stats
+    const statsConditions = [];
+    const statsParams = [];
+    if (req.query.state) {
+      statsConditions.push("v.state = ?");
+      statsParams.push(req.query.state);
+    }
+    if (req.query.district) {
+      statsConditions.push("v.district = ?");
+      statsParams.push(req.query.district);
+    }
+    if (req.query.search) {
+      statsConditions.push("v.village_name LIKE ?");
+      statsParams.push(`%${req.query.search}%`);
+    }
+    const statsWhere = statsConditions.length ? "WHERE " + statsConditions.join(" AND ") : "";
+
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total_count,
+        SUM(CASE WHEN drinking_water_coverage_pct >= ${water_t} THEN 1 ELSE 0 END) as water_count,
+        SUM(CASE WHEN sanitation_coverage_pct >= ${sanitation_t} THEN 1 ELSE 0 END) as sanitation_count,
+        SUM(CASE WHEN electricity_hours_per_day >= ${electricity_t} THEN 1 ELSE 0 END) as electricity_count,
+        SUM(CASE WHEN school_count >= ${school_t} THEN 1 ELSE 0 END) as school_count,
+        SUM(CASE WHEN nearest_hospital_distance_km <= ${hospital_t} THEN 1 ELSE 0 END) as hospital_count,
+        SUM(CASE WHEN road_quality_index >= ${road_t} THEN 1 ELSE 0 END) as road_count,
+        SUM(CASE WHEN [internet_penetration%] >= ${internet_t} THEN 1 ELSE 0 END) as internet_count,
+        SUM(CASE WHEN 
+          drinking_water_coverage_pct >= ${water_t} AND
+          sanitation_coverage_pct >= ${sanitation_t} AND
+          electricity_hours_per_day >= ${electricity_t} AND
+          school_count >= ${school_t} AND
+          nearest_hospital_distance_km <= ${hospital_t} AND
+          road_quality_index >= ${road_t} AND
+          [internet_penetration%] >= ${internet_t}
+          THEN 1 ELSE 0 END) as all_fulfilled_count
+      FROM villages v
+      ${statsWhere}
+    `;
+    const aggregates = db.prepare(statsQuery).get(statsParams);
+
+    const resultObj = {
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      aggregates: aggregates || {
+        total_count: 0,
+        water_count: 0,
+        sanitation_count: 0,
+        electricity_count: 0,
+        school_count: 0,
+        hospital_count: 0,
+        road_count: 0,
+        internet_count: 0,
+        all_fulfilled_count: 0
+      }
+    };
+
+    setCachedResponse(cacheKey, resultObj);
+    res.json(resultObj);
+  } catch (err) {
+    console.error("Amenities status error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /api/villages/:id ──────────────────────────────────────────────
 // Full village detail with all metrics (grouped by category dynamically from flat columns)
 app.get("/api/villages/:id", (req, res) => {
