@@ -152,4 +152,29 @@ export async function fetchDataQualityReport() {
   return res.json();
 }
 
+export async function fetchAmenitiesStatus(params = {}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', params.page);
+  if (params.limit) query.set('limit', params.limit);
+  if (params.state) query.set('state', params.state);
+  if (params.district) query.set('district', params.district);
+  if (params.search) query.set('search', params.search);
+  if (params.sort_by) query.set('sort_by', params.sort_by);
+  if (params.order) query.set('order', params.order);
+  if (params.fulfillment) query.set('fulfillment', params.fulfillment);
+  if (params.missing) query.set('missing', params.missing);
+
+  // Thresholds
+  if (params.water_t !== undefined) query.set('water_t', params.water_t);
+  if (params.sanitation_t !== undefined) query.set('sanitation_t', params.sanitation_t);
+  if (params.electricity_t !== undefined) query.set('electricity_t', params.electricity_t);
+  if (params.school_t !== undefined) query.set('school_t', params.school_t);
+  if (params.hospital_t !== undefined) query.set('hospital_t', params.hospital_t);
+  if (params.road_t !== undefined) query.set('road_t', params.road_t);
+  if (params.internet_t !== undefined) query.set('internet_t', params.internet_t);
+
+  const res = await fetch(`${API_BASE}/villages/amenities-status?${query}`);
+  return res.json();
+}
+
 
