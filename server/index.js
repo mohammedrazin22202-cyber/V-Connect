@@ -1773,7 +1773,280 @@ app.get("/api/admin/pipeline-logs", (req, res) => {
   });
 });
 
+// ── V-Connect Dashboard Enhancements Endpoints ──────────────────────────────
+
+const METRIC_MAP = {
+  economy: ["employment_rate", "avg_household_income", "poverty_rate", "crop_yield_index%", "farmer_income_avg", "farmer_debt_index", "market_access_score", "bank_access_score"],
+  education: ["literacy_rate", "female_literacy_rate", "dropout_rate", "school_count", "teacher_student_ratio", "digital_literacy_rate"],
+  health: ["infant_mortality_rate", "malnutrition_rate", "vaccination_coverage%", "medical_staff_per_1000", "avg_healthcare_access_time_min", "healthcare_effectiveness_score"],
+  infrastructure: ["drinking_water_coverage_pct", "sanitation_coverage_pct", "road_quality_index", "electricity_hours_per_day", "internet_penetration%", "nearest_hospital_distance_km"],
+  environment: ["flood_risk_score", "earthquake_risk_score", "air_quality_index", "forest_cover_pct", "disaster_preparedness_score", "climate_vulnerability_index"],
+  governance: ["panchayat_efficiency_score", "transparency_index", "fund_utilization_pct", "scheme_coverage_pct", "corruption_risk_proxy"],
+  social: ["total_crime_rate", "crimes_against_women_rate", "social_cohesion_index", "community_participation_score", "youth_engagement_score"]
+};
+
+const NEGATIVE_METRICS = new Set([
+  "poverty_rate", "farmer_debt_index", "dropout_rate", "infant_mortality_rate", 
+  "malnutrition_rate", "avg_healthcare_access_time_min", "flood_risk_score", 
+  "earthquake_risk_score", "climate_vulnerability_index", "corruption_risk_proxy", 
+  "total_crime_rate", "crimes_against_women_rate", "nearest_hospital_distance_km",
+  "air_quality_index"
+]);
+
+function normalizeMetric(name, val) {
+  const meta = metricMeta[name];
+  if (!meta) return 50.0;
+  const { min, max } = meta;
+  if (min === max) return 50.0;
+  
+  let norm = ((val - min) / (max - min)) * 100;
+  norm = Math.max(0.0, Math.min(100.0, norm)); // clamp
+  
+  if (NEGATIVE_METRICS.has(name)) {
+    return 100.0 - norm;
+  }
+  return norm;
+}
+
+// GET /api/districts/rankings
+app.get("/api/districts/rankings", (req, res) => {
+  try {
+    const state = req.query.state || "";
+    const sortBy = req.query.sort_by || "overall_score";
+    const order = req.query.order || "desc";
+
+    const allowedSort = [
+      "overall_score", "economy_score", "education_score", "health_score",
+      "infrastructure_score", "environment_score", "governance_score", "social_score",
+      "total_population", "village_count"
+    ];
+    const actualSort = allowedSort.includes(sortBy) ? sortBy : "overall_score";
+    const actualOrder = order.toLowerCase() === "asc" ? "ASC" : "DESC";
+
+    let query = `
+      SELECT
+        v.state,
+        v.district,
+        AVG(d.overall_score) as overall_score,
+        AVG(d.economy_score) as economy_score,
+        AVG(d.education_score) as education_score,
+        AVG(d.health_score) as health_score,
+        AVG(d.infrastructure_score) as infrastructure_score,
+        AVG(d.environment_score) as environment_score,
+        AVG(d.governance_score) as governance_score,
+        AVG(d.social_score) as social_score,
+        SUM(v.total_population) as total_population,
+        COUNT(v.village_id) as village_count
+      FROM villages v
+      JOIN domain_scores d ON v.village_id = d.village_id
+    `;
+
+    const params = [];
+    if (state) {
+      query += ` WHERE v.state = ? `;
+      params.push(state);
+    }
+
+    query += ` GROUP BY v.state, v.district ORDER BY ${actualSort} ${actualOrder} `;
+
+    const rows = db.prepare(query).all(...params);
+
+    const rankedRows = rows.map((r, i) => ({
+      ...r,
+      rank: i + 1,
+      overall_score: Number(r.overall_score.toFixed(2)),
+      economy_score: Number(r.economy_score.toFixed(2)),
+      education_score: Number(r.education_score.toFixed(2)),
+      health_score: Number(r.health_score.toFixed(2)),
+      infrastructure_score: Number(r.infrastructure_score.toFixed(2)),
+      environment_score: Number(r.environment_score.toFixed(2)),
+      governance_score: Number(r.governance_score.toFixed(2)),
+      social_score: Number(r.social_score.toFixed(2)),
+    }));
+
+    res.json({ success: true, data: rankedRows });
+  } catch (err) {
+    console.error("District rankings API error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/anomalies
+app.get("/api/admin/anomalies", (req, res) => {
+  try {
+    const limit = 50;
+
+    // 1. Economic Disconnect
+    const econCount = db.prepare("SELECT COUNT(*) as count FROM villages WHERE poverty_rate > 35 AND avg_household_income > 150000").get().count;
+    const econRows = db.prepare(`
+      SELECT village_id, village_name, district, state, poverty_rate, avg_household_income, total_population 
+      FROM villages 
+      WHERE poverty_rate > 35 AND avg_household_income > 150000 
+      LIMIT ?
+    `).all(limit);
+
+    // 2. Healthcare Isolation
+    const healthCount = db.prepare("SELECT COUNT(*) as count FROM villages WHERE total_population > 2000 AND nearest_hospital_distance_km > 25 AND road_quality_index < 35").get().count;
+    const healthRows = db.prepare(`
+      SELECT village_id, village_name, district, state, total_population, nearest_hospital_distance_km, road_quality_index 
+      FROM villages 
+      WHERE total_population > 2000 AND nearest_hospital_distance_km > 25 AND road_quality_index < 35 
+      LIMIT ?
+    `).all(limit);
+
+    // 3. Educational Inefficiency
+    const eduCount = db.prepare("SELECT COUNT(*) as count FROM villages WHERE school_count >= 3 AND literacy_rate < 45").get().count;
+    const eduRows = db.prepare(`
+      SELECT village_id, village_name, district, state, school_count, literacy_rate, dropout_rate, total_population 
+      FROM villages 
+      WHERE school_count >= 3 AND literacy_rate < 45 
+      LIMIT ?
+    `).all(limit);
+
+    // 4. Basic Infrastructure Gap
+    const infraCount = db.prepare("SELECT COUNT(*) as count FROM villages WHERE total_population > 4000 AND (drinking_water_coverage_pct < 40 OR electricity_hours_per_day < 8)").get().count;
+    const infraRows = db.prepare(`
+      SELECT village_id, village_name, district, state, total_population, drinking_water_coverage_pct, electricity_hours_per_day 
+      FROM villages 
+      WHERE total_population > 4000 AND (drinking_water_coverage_pct < 40 OR electricity_hours_per_day < 8) 
+      LIMIT ?
+    `).all(limit);
+
+    // 5. Social Paradox
+    const socialCount = db.prepare("SELECT COUNT(*) as count FROM villages WHERE social_cohesion_index > 65 AND total_crime_rate > 45").get().count;
+    const socialRows = db.prepare(`
+      SELECT village_id, village_name, district, state, social_cohesion_index, total_crime_rate, total_population 
+      FROM villages 
+      WHERE social_cohesion_index > 65 AND total_crime_rate > 45 
+      LIMIT ?
+    `).all(limit);
+
+    res.json({
+      success: true,
+      counts: {
+        economic: econCount,
+        healthcare: healthCount,
+        education: eduCount,
+        infrastructure: infraCount,
+        social: socialCount,
+        total: econCount + healthCount + eduCount + infraCount + socialCount
+      },
+      data: {
+        economic: econRows,
+        healthcare: healthRows,
+        education: eduRows,
+        infrastructure: infraRows,
+        social: socialRows
+      }
+    });
+  } catch (err) {
+    console.error("Anomalies diagnostic error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/villages/:id/update-metrics
+app.post("/api/villages/:id/update-metrics", (req, res) => {
+  try {
+    const id = safeInt(req.params.id, 0);
+    const { metrics } = req.body;
+    
+    if (!id || !metrics) {
+      return res.status(400).json({ error: "Missing village ID or metrics payload" });
+    }
+
+    const current = db.prepare("SELECT * FROM villages WHERE village_id = ?").get(id);
+    if (!current) {
+      return res.status(404).json({ error: "Village not found" });
+    }
+
+    const updated = { ...current };
+    for (const key in metrics) {
+      if (key !== "village_id" && key !== "state" && key !== "district") {
+        updated[key] = metrics[key];
+      }
+    }
+
+    const domains = ["economy", "education", "health", "infrastructure", "environment", "governance", "social"];
+    const computedScores = {};
+    let overallSum = 0;
+
+    for (const d of domains) {
+      const cols = METRIC_MAP[d];
+      let sum = 0;
+      let count = 0;
+      for (const col of cols) {
+        if (updated[col] !== undefined && updated[col] !== null) {
+          const val = Number(updated[col]);
+          const norm = normalizeMetric(col, val);
+          sum += norm;
+          count++;
+        }
+      }
+      const score = count > 0 ? (sum / count) : 50.0;
+      computedScores[`${d}_score`] = Number(score.toFixed(2));
+      overallSum += score;
+    }
+
+    const overallScore = Number((overallSum / 7).toFixed(2));
+
+    const setClause = [];
+    const updateParams = [];
+    for (const col in updated) {
+      if (col !== "village_id") {
+        setClause.push(`[${col}] = ?`);
+        updateParams.push(updated[col]);
+      }
+    }
+    updateParams.push(id);
+
+    const updateVillageSql = `UPDATE villages SET ${setClause.join(", ")} WHERE village_id = ?`;
+    db.prepare(updateVillageSql).run(...updateParams);
+
+    db.prepare(`
+      UPDATE domain_scores
+      SET economy_score = ?, education_score = ?, health_score = ?, infrastructure_score = ?, 
+          environment_score = ?, governance_score = ?, social_score = ?, overall_score = ?
+      WHERE village_id = ?
+    `).run(
+      computedScores.economy_score,
+      computedScores.education_score,
+      computedScores.health_score,
+      computedScores.infrastructure_score,
+      computedScores.environment_score,
+      computedScores.governance_score,
+      computedScores.social_score,
+      overallScore,
+      id
+    );
+
+    db.prepare(`
+      UPDATE domain_scores 
+      SET overall_rank = (
+        SELECT COUNT(*) FROM domain_scores d2 WHERE d2.overall_score > domain_scores.overall_score
+      ) + 1
+    `).run();
+
+    rebuildDashboardStats();
+    invalidateApiCache();
+
+    res.json({
+      success: true,
+      message: "Village metrics updated and ranks recalculated successfully.",
+      scores: {
+        ...computedScores,
+        overall_score: overallScore
+      }
+    });
+
+  } catch (err) {
+    console.error("Update village metrics error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Start Server ───────────────────────────────────────────────────────
+
 app.listen(PORT, () => {
   console.log(`\n🏘  VCONNECT API running at http://localhost:${PORT}`);
   console.log(`   Endpoints:`);
