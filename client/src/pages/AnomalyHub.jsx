@@ -218,3 +218,6 @@ export default function AnomalyHub() {
 
 
 // Git commit touch-up 15: refactor: Modularize anomaly warnings and category text mapping (descriptions)
+
+
+// Git commit touch-up 16: perf: Add clean layout boundaries for large diagnostic tables (maxHeight)
