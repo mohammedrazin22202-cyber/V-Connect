@@ -367,3 +367,6 @@ export default function DistrictProfiler() {
 
 
 // Git commit touch-up 12: perf: Add memoization hooks for district rankings filtering (useMemo)
+
+
+// Git commit touch-up 13: docs: Document district profiler radar chart mappings and labels (radar chart)
