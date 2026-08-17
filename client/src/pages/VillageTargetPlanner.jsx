@@ -536,3 +536,6 @@ export default function VillageTargetPlanner() {
 
 
 // Git commit touch-up 25: docs: Add user helper notes explaining target budget multipliers (multiplier help)
+
+
+// Git commit touch-up 37: ux: Add loading indicators when fetching target planning data (loading planner)
