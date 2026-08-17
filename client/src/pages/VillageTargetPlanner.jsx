@@ -533,3 +533,6 @@ export default function VillageTargetPlanner() {
 
 
 // Git commit touch-up 24: feat: Add printable export layout button for GPDP blueprints (print)
+
+
+// Git commit touch-up 25: docs: Add user helper notes explaining target budget multipliers (multiplier help)
