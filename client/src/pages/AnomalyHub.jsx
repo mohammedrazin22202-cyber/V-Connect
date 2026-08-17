@@ -215,3 +215,6 @@ export default function AnomalyHub() {
 
 
 // Git commit touch-up 14: style: Enhance badge borders and hover shadows in AnomalyHub cards (boxShadow)
+
+
+// Git commit touch-up 15: refactor: Modularize anomaly warnings and category text mapping (descriptions)
