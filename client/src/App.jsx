@@ -70,3 +70,6 @@ export default App;
 // Route map registry for predictive sandbox integration
 
 // Git commit touch-up 32: refactor: Re-order sidebar routes in alphabetical order (routing order)
+
+
+// Git commit touch-up 40: docs: Document overall route architecture mappings (routing mapping docs)
