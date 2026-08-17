@@ -1,0 +1,170 @@
+{
+  "employment_rate": {
+    "min": 0,
+    "max": 91.16
+  },
+  "avg_household_income": {
+    "min": 0,
+    "max": 239889
+  },
+  "poverty_rate": {
+    "min": 0,
+    "max": 75
+  },
+  "crop_yield_index%": {
+    "min": 0,
+    "max": 95
+  },
+  "farmer_income_avg": {
+    "min": 0,
+    "max": 319727
+  },
+  "farmer_debt_index": {
+    "min": 0,
+    "max": 95
+  },
+  "market_access_score": {
+    "min": 0,
+    "max": 95
+  },
+  "bank_access_score": {
+    "min": 0,
+    "max": 98
+  },
+  "literacy_rate": {
+    "min": 0,
+    "max": 95.61
+  },
+  "female_literacy_rate": {
+    "min": 0,
+    "max": 94.01
+  },
+  "dropout_rate": {
+    "min": 0,
+    "max": 55
+  },
+  "school_count": {
+    "min": 0,
+    "max": 11
+  },
+  "teacher_student_ratio": {
+    "min": 18,
+    "max": 70
+  },
+  "digital_literacy_rate": {
+    "min": 0,
+    "max": 95
+  },
+  "infant_mortality_rate": {
+    "min": 0,
+    "max": 80
+  },
+  "malnutrition_rate": {
+    "min": 0,
+    "max": 65
+  },
+  "vaccination_coverage%": {
+    "min": 0,
+    "max": 98
+  },
+  "medical_staff_per_1000": {
+    "min": 0,
+    "max": 3.37
+  },
+  "avg_healthcare_access_time_min": {
+    "min": 8,
+    "max": 240
+  },
+  "healthcare_effectiveness_score": {
+    "min": 0,
+    "max": 91.96
+  },
+  "drinking_water_coverage_pct": {
+    "min": 0,
+    "max": 98
+  },
+  "sanitation_coverage_pct": {
+    "min": 0,
+    "max": 95
+  },
+  "road_quality_index": {
+    "min": 0,
+    "max": 98
+  },
+  "electricity_hours_per_day": {
+    "min": 4,
+    "max": 24
+  },
+  "internet_penetration%": {
+    "min": 10,
+    "max": 98
+  },
+  "nearest_hospital_distance_km": {
+    "min": 1,
+    "max": 58.87
+  },
+  "flood_risk_score": {
+    "min": 0,
+    "max": 98
+  },
+  "earthquake_risk_score": {
+    "min": 5,
+    "max": 95
+  },
+  "air_quality_index": {
+    "min": 0,
+    "max": 98
+  },
+  "forest_cover_pct": {
+    "min": 2,
+    "max": 85
+  },
+  "disaster_preparedness_score": {
+    "min": 0,
+    "max": 86.81
+  },
+  "climate_vulnerability_index": {
+    "min": 0,
+    "max": 67.36
+  },
+  "panchayat_efficiency_score": {
+    "min": 0,
+    "max": 88.68
+  },
+  "transparency_index": {
+    "min": 0,
+    "max": 98
+  },
+  "fund_utilization_pct": {
+    "min": 0,
+    "max": 97.84
+  },
+  "scheme_coverage_pct": {
+    "min": 0,
+    "max": 96.26
+  },
+  "corruption_risk_proxy": {
+    "min": 0,
+    "max": 95
+  },
+  "total_crime_rate": {
+    "min": 0,
+    "max": 85
+  },
+  "crimes_against_women_rate": {
+    "min": 0,
+    "max": 70
+  },
+  "social_cohesion_index": {
+    "min": 0,
+    "max": 86.97
+  },
+  "community_participation_score": {
+    "min": 0,
+    "max": 91.05
+  },
+  "youth_engagement_score": {
+    "min": 0,
+    "max": 82.2
+  }
+}
