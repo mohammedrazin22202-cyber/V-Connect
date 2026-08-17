@@ -530,3 +530,6 @@ export default function VillageTargetPlanner() {
 
 
 // Git commit touch-up 23: style: Optimize slider thumb accent colors for better visibility (accentColor)
+
+
+// Git commit touch-up 24: feat: Add printable export layout button for GPDP blueprints (print)
