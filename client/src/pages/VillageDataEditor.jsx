@@ -422,3 +422,6 @@ export default function VillageDataEditor() {
 
 
 // Git commit touch-up 21: docs: Add description blocks for metric ranges in editor forms (description)
+
+
+// Git commit touch-up 36: refactor: Implement instant field reset action in CRUD editor (reset button)
