@@ -221,3 +221,6 @@ export default function AnomalyHub() {
 
 
 // Git commit touch-up 16: perf: Add clean layout boundaries for large diagnostic tables (maxHeight)
+
+
+// Git commit touch-up 17: docs: Add detailed explanations of statistical data paradox definitions (documentation)
