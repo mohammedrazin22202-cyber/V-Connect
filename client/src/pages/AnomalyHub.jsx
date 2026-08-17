@@ -224,3 +224,6 @@ export default function AnomalyHub() {
 
 
 // Git commit touch-up 17: docs: Add detailed explanations of statistical data paradox definitions (documentation)
+
+
+// Git commit touch-up 35: style: Use softer warning borders in healthcare isolation lists (borderLeft)
