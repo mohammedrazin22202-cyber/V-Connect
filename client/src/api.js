@@ -177,4 +177,28 @@ export async function fetchAmenitiesStatus(params = {}) {
   return res.json();
 }
 
+export async function fetchDistrictRankings(params = {}) {
+  const query = new URLSearchParams();
+  if (params.state) query.set('state', params.state);
+  if (params.sort_by) query.set('sort_by', params.sort_by);
+  if (params.order) query.set('order', params.order);
+  const res = await fetch(`${API_BASE}/districts/rankings?${query}`);
+  return res.json();
+}
+
+export async function fetchAnomalies() {
+  const res = await fetch(`${API_BASE}/admin/anomalies`);
+  return res.json();
+}
+
+export async function updateVillageMetrics(id, metrics) {
+  const res = await fetch(`${API_BASE}/villages/${id}/update-metrics`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ metrics }),
+  });
+  return res.json();
+}
+
+
 
