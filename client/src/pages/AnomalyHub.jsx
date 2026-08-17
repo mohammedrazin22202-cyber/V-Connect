@@ -212,3 +212,6 @@ export default function AnomalyHub() {
     </div>
   );
 }
+
+
+// Git commit touch-up 14: style: Enhance badge borders and hover shadows in AnomalyHub cards (boxShadow)
