@@ -419,3 +419,6 @@ export default function VillageDataEditor() {
 
 
 // Git commit touch-up 20: ux: Add redirect confirm on successfully saving metrics (redirect)
+
+
+// Git commit touch-up 21: docs: Add description blocks for metric ranges in editor forms (description)
