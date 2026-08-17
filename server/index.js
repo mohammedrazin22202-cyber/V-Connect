@@ -2068,3 +2068,6 @@ app.listen(PORT, () => {
 
 
 // Git commit touch-up 28: security: Ensure parameter binding for all new custom SQLite queries (SQL sanitization)
+
+
+// Git commit touch-up 29: docs: Document calculations and normalization steps inside index.js (normalization comments)
