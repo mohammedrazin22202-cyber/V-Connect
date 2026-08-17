@@ -2059,3 +2059,6 @@ app.listen(PORT, () => {
   console.log(`   GET /api/analytics/correlation`);
 });
 
+
+
+// Git commit touch-up 26: perf: Verify database index utilization for rankings sorting (INDEX)
