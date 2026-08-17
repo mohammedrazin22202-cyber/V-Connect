@@ -10,6 +10,10 @@ import SpatialAnalytics from './pages/SpatialAnalytics';
 import PredictiveSandbox from './pages/PredictiveSandbox';
 import ReportBuilder from './pages/ReportBuilder';
 import AdminPortal from './pages/AdminPortal';
+import DistrictProfiler from './pages/DistrictProfiler';
+import VillageTargetPlanner from './pages/VillageTargetPlanner';
+import AnomalyHub from './pages/AnomalyHub';
+import VillageDataEditor from './pages/VillageDataEditor';
 import Sidebar from './components/Sidebar';
 import './index.css';
 
@@ -49,6 +53,11 @@ function App() {
             <Route path="/predictive" element={<PredictiveSandbox />} />
             <Route path="/reports" element={<ReportBuilder />} />
             <Route path="/admin" element={<AdminPortal />} />
+            <Route path="/districts" element={<DistrictProfiler />} />
+            <Route path="/target-planner" element={<VillageTargetPlanner />} />
+            <Route path="/anomalies" element={<AnomalyHub />} />
+            <Route path="/edit-village/:id" element={<VillageDataEditor />} />
+            <Route path="/edit-village" element={<VillageDataEditor />} />
           </Routes>
         </main>
       </div>
