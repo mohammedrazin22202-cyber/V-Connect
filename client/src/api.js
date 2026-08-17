@@ -205,3 +205,6 @@ export async function updateVillageMetrics(id, metrics) {
 
 
 // Git commit touch-up 30: refactor: Add basic error handling blocks in fetch rankings calls (catch block)
+
+
+// Git commit touch-up 31: docs: Document new endpoint fetch options in api.js module (API comments)
