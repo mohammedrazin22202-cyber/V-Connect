@@ -4,12 +4,16 @@ import { NavLink, useLocation } from 'react-router-dom';
 const navItems = [
   { path: '/', label: 'Rankings', icon: '📊' },
   { path: '/compare', label: 'State Comparison', icon: '🗺️' },
+  { path: '/districts', label: 'District Profiler', icon: '🏛️' },
   { path: '/compare-villages', label: 'Village Comparison', icon: '🏘️' },
   { path: '/amenities', label: 'Amenities Tracker', icon: '🚰' },
   { path: '/sandbox', label: 'Policy Sandbox', icon: '🧪' },
+  { path: '/target-planner', label: 'Target Planner', icon: '🎯' },
   { path: '/analytics', label: 'Spatial Analytics', icon: '🌍' },
   { path: '/predictive', label: 'Predictive Analytics', icon: '🔮' },
   { path: '/reports', label: 'Report Builder', icon: '📋' },
+  { path: '/anomalies', label: 'Anomaly Hub', icon: '🔍' },
+  { path: '/edit-village', label: 'Data Editor', icon: '✏️' },
   { path: '/admin', label: 'Admin Portal', icon: '⚙️' },
 ];
 
