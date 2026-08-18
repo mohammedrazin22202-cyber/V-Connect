@@ -2205,3 +2205,4 @@ app.listen(PORT, () => {
 // Git commit touch-up 38: perf: Optimize global rankings recalculation query speed (UPDATE rank optimization)
 
 // Local recommendations: Rules mapped to Jal Jeevan, Samagra Shiksha, POSHAN Abhiyaan, Nirbhaya Fund.
+// Security validation: SQL sanitization enforced on all input params.
