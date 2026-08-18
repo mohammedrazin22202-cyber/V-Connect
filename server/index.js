@@ -790,6 +790,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "PM-KISAN & Kisan Credit Card (KCC)",
         finding: (v) => `Farmer debt stress index is elevated at **${v.farmer_debt_index.toFixed(1)}/100**.`,
         intervention: "Conduct institutional loan enrollment drives to transition farmers away from private moneylenders and promote crop insurance."
+      },
+      {
+        key: "economy",
+        check: (v) => v["crop_yield_index%"] !== null && v["crop_yield_index%"] < 50,
+        alignment: "PM Krishi Sinchayee Yojana (PMKSY)",
+        finding: (v) => `Crop yield index is low at **${v["crop_yield_index%"].toFixed(1)}%**.`,
+        intervention: "Construct village check dams and introduce micro-irrigation systems (drip/sprinkler) to improve water-use efficiency."
       }
     ];
 
