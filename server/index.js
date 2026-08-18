@@ -713,6 +713,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "Swachh Bharat Mission (Grameen)",
         finding: (v) => `Individual household toilet/sanitation coverage is low at **${v.sanitation_coverage_pct.toFixed(1)}%**.`,
         intervention: "Construct community sanitary complexes and construct decentralized solid/liquid waste pits."
+      },
+      {
+        key: "infrastructure",
+        check: (v) => v.electricity_hours_per_day !== null && v.electricity_hours_per_day < 14,
+        alignment: "Deendayal Upadhyaya Gram Jyoti Yojana (DDUGJY)",
+        finding: (v) => `Grid power supply averages only **${v.electricity_hours_per_day.toFixed(1)} hours/day**.`,
+        intervention: "Install rooftop solar power grids on government buildings and upgrade transformer substation capacity."
       }
     ];
 
