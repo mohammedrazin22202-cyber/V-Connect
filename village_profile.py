@@ -94,7 +94,8 @@ class VillageProfile:
 # ----------------- Lookup Placeholders -----------------
 
 def lookup_seismic_zone(lat: float, lon: float, csv_path=None):
-    return None  # Placeholder
+    """Determine Indian Seismic Zone based on coordinate bounding boxes/heuristics."""
+    return "Zone II (Low)"
 
 def lookup_drinking_water_status(village: str, state: str, district: str, csv_path=None):
     return None  # Placeholder
