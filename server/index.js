@@ -783,6 +783,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "Deendayal Antyodaya Yojana (DAY-NRLM) & MGNREGA",
         finding: (v) => `Poverty rate is high at **${v.poverty_rate.toFixed(1)}%**.`,
         intervention: "Expand job card registration under MGNREGA and register women in Self-Help Groups (SHGs) to facilitate micro-credit and vocational skill training."
+      },
+      {
+        key: "economy",
+        check: (v) => v.farmer_debt_index !== null && v.farmer_debt_index > 40,
+        alignment: "PM-KISAN & Kisan Credit Card (KCC)",
+        finding: (v) => `Farmer debt stress index is elevated at **${v.farmer_debt_index.toFixed(1)}/100**.`,
+        intervention: "Conduct institutional loan enrollment drives to transition farmers away from private moneylenders and promote crop insurance."
       }
     ];
 
