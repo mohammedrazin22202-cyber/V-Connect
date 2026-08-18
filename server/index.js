@@ -755,6 +755,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "PMGDISHA",
         finding: (v) => `Digital literacy is lagging at **${v.digital_literacy_rate.toFixed(1)}%**.`,
         intervention: "Set up a free computer training center and run evening computer literacy bootcamps for local youth."
+      },
+      {
+        key: "health",
+        check: (v) => v.malnutrition_rate !== null && v.malnutrition_rate > 15,
+        alignment: "POSHAN Abhiyaan",
+        finding: (v) => `Child malnutrition rate is elevated at **${v.malnutrition_rate.toFixed(1)}%**.`,
+        intervention: "Enhance Anganwadi centers to distribute fortified supplementary nutrition and conduct regular baby weighing and nutritional audits."
       }
     ];
 
