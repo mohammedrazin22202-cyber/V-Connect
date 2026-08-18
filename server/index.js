@@ -734,6 +734,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "PMGSY / National Health Mission",
         finding: (v) => `The nearest hospital is **${v.nearest_hospital_distance_km.toFixed(1)} km** away, creating severe isolation.`,
         intervention: "Secure priority funding under PMGSY to build all-weather roads and coordinate weekly Mobile Medical Unit (MMU) visits."
+      },
+      {
+        key: "education",
+        check: (v) => v.dropout_rate !== null && v.dropout_rate > 10,
+        alignment: "Samagra Shiksha Abhiyan",
+        finding: (v) => `School dropout rate is high at **${v.dropout_rate.toFixed(1)}%**.`,
+        intervention: "Deploy student retention counselors, implement free lunch incentives, and distribute free bicycles/uniforms to reduce transition barriers."
       }
     ];
 
