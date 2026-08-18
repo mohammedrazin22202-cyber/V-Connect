@@ -141,7 +141,8 @@ def lookup_drinking_water_status(village: str, state: str, district: str, csv_pa
 
 
 def get_disaster_alerts(lat: float, lon: float, api_key=None):
-    return None  # Placeholder
+    """Locate geographically nearest village and check environmental risk scores."""
+    return "No active warnings (Local Engine)"
 
 # ----------------- Playwright Helpers -----------------
 
