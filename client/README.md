@@ -17,3 +17,6 @@ This directory contains the React frontend application built using Vite, Tailwin
 
 ### Offline Data Lookups
 The village profile scraping engine utilizes a local SQLite database copy and coordinate bounding boxes to resolve environmental warnings and seismic risk zones locally without requesting external geocoding API keys.
+
+### UX Transitions
+Transitions are optimized for rendering list items and breakdown cards cleanly under low-latency fallback modes.
