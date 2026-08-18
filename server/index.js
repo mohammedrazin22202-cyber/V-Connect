@@ -762,6 +762,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "POSHAN Abhiyaan",
         finding: (v) => `Child malnutrition rate is elevated at **${v.malnutrition_rate.toFixed(1)}%**.`,
         intervention: "Enhance Anganwadi centers to distribute fortified supplementary nutrition and conduct regular baby weighing and nutritional audits."
+      },
+      {
+        key: "health",
+        check: (v) => v["vaccination_coverage%"] !== null && v["vaccination_coverage%"] < 80,
+        alignment: "Mission Indradhanush",
+        finding: (v) => `Immunization/vaccination coverage is suboptimal at **${v["vaccination_coverage%"].toFixed(1)}%**.`,
+        intervention: "Conduct monthly immunization drives and deploy ASHA workers to address vaccine hesitancy and track unvaccinated children."
       }
     ];
 
