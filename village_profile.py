@@ -141,8 +141,46 @@ def lookup_drinking_water_status(village: str, state: str, district: str, csv_pa
 
 
 def get_disaster_alerts(lat: float, lon: float, api_key=None):
-    """Locate geographically nearest village and check environmental risk scores."""
+def get_disaster_alerts(lat: float, lon: float, api_key=None):
+    """Locate the nearest village geographically in our database and check environmental risk scores."""
+    if lat is None or lon is None:
+        return "No Coordinates"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(base_dir, "server", "vconnect.db")
+    if not os.path.exists(db_path):
+        db_path = os.path.join(base_dir, "vconnect.db")
+    try:
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        # Find nearest village in the database that has coordinates
+        cur.execute("""
+            SELECT village_name, district, state, flood_risk_score, earthquake_risk_score, climate_vulnerability_index
+            FROM villages
+            WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+            ORDER BY ((latitude - ?) * (latitude - ?) + (longitude - ?) * (longitude - ?)) ASC
+            LIMIT 1
+        """, (lat, lat, lon, lon))
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            name, dist, st, flood, earthquake, climate = row
+            alerts = []
+            if flood and flood > 40:
+                alerts.append(f"High Flood Risk ({flood:.1f}%)")
+            if earthquake and earthquake > 35:
+                alerts.append(f"High Earthquake Risk ({earthquake:.1f}%)")
+            if climate and climate > 40:
+                alerts.append(f"High Climate Vulnerability ({climate:.1f}%)")
+            
+            if alerts:
+                return f"Alerts: {', '.join(alerts)} (nearest: {name}, {dist})"
+            else:
+                return "No active environmental warnings (Low risk)"
+    except Exception as e:
+        print(f"Error querying disaster alerts: {e}")
     return "No active warnings (Local Engine)"
+
 
 # ----------------- Playwright Helpers -----------------
 
