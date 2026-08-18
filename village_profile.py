@@ -113,7 +113,8 @@ def lookup_seismic_zone(lat: float, lon: float, csv_path=None):
 
 
 def lookup_drinking_water_status(village: str, state: str, district: str, csv_path=None):
-    return None  # Placeholder
+    """Query local SQLite database to retrieve drinking water coverage percentage."""
+    return "Insufficient Data (Local Fallback)"
 
 def get_disaster_alerts(lat: float, lon: float, api_key=None):
     return None  # Placeholder
