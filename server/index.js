@@ -797,6 +797,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "PM Krishi Sinchayee Yojana (PMKSY)",
         finding: (v) => `Crop yield index is low at **${v["crop_yield_index%"].toFixed(1)}%**.`,
         intervention: "Construct village check dams and introduce micro-irrigation systems (drip/sprinkler) to improve water-use efficiency."
+      },
+      {
+        key: "environment",
+        check: (v) => v.flood_risk_score !== null && v.flood_risk_score > 35,
+        alignment: "National Disaster Management Authority (NDMA) Guidelines",
+        finding: (v) => `Flood risk score is high at **${v.flood_risk_score.toFixed(1)}/100**.`,
+        intervention: "Formulate community evacuation routes, construct embankments along low-lying zones, and raise plinth levels of community shelters."
       }
     ];
 
