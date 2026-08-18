@@ -720,6 +720,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "Deendayal Upadhyaya Gram Jyoti Yojana (DDUGJY)",
         finding: (v) => `Grid power supply averages only **${v.electricity_hours_per_day.toFixed(1)} hours/day**.`,
         intervention: "Install rooftop solar power grids on government buildings and upgrade transformer substation capacity."
+      },
+      {
+        key: "infrastructure",
+        check: (v) => v["internet_penetration%"] !== null && v["internet_penetration%"] < 40,
+        alignment: "BharatNet / Digital India",
+        finding: (v) => `Internet penetration is low at **${v["internet_penetration%"].toFixed(1)}%**.`,
+        intervention: "Activate a public Wi-Fi hotspot at the Gram Panchayat bhawan and community schools."
       }
     ];
 
