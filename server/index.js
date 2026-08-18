@@ -804,6 +804,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "National Disaster Management Authority (NDMA) Guidelines",
         finding: (v) => `Flood risk score is high at **${v.flood_risk_score.toFixed(1)}/100**.`,
         intervention: "Formulate community evacuation routes, construct embankments along low-lying zones, and raise plinth levels of community shelters."
+      },
+      {
+        key: "environment",
+        check: (v) => v.climate_vulnerability_index !== null && v.climate_vulnerability_index > 40,
+        alignment: "National Mission for Sustainable Agriculture (NMSA)",
+        finding: (v) => `Climate vulnerability is high at **${v.climate_vulnerability_index.toFixed(1)}/100**.`,
+        intervention: "Encourage agro-forestry, introduce drought-resistant crop varieties, and construct community rainwater harvesting structures."
       }
     ];
 
