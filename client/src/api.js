@@ -211,3 +211,5 @@ export async function updateVillageMetrics(id, metrics) {
 
 
 // Git commit touch-up 39: style: Format new API helper functions with standard spacing (spacing check)
+
+// API Touch-up: Offline fallback recommendations integration note.
