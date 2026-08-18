@@ -94,8 +94,23 @@ class VillageProfile:
 # ----------------- Lookup Placeholders -----------------
 
 def lookup_seismic_zone(lat: float, lon: float, csv_path=None):
+def lookup_seismic_zone(lat: float, lon: float, csv_path=None):
     """Determine Indian Seismic Zone based on coordinate bounding boxes/heuristics."""
-    return "Zone II (Low)"
+    if lat is None or lon is None:
+        return "Unknown"
+    # Zone V: Very High Damage Risk (North-East, Kutch, parts of J&K/Himachal)
+    if (lat > 32.0 and lon > 74.0 and lon < 78.0) or (lat > 21.5 and lat < 24.5 and lon > 68.0 and lon < 71.5) or (lat > 21.0 and lon > 89.0):
+        return "Zone V (Very High)"
+    # Zone IV: High Damage Risk (Remaining parts of J&K, Himachal, Uttarakhand, Delhi, Sikkim, Northern Bihar)
+    elif (lat > 29.0 and lon > 76.0 and lon < 81.0) or (lat > 25.5 and lat < 27.5 and lon > 84.0 and lon < 88.0) or (lat > 31.0 and lon > 73.0):
+        return "Zone IV (High)"
+    # Zone III: Moderate Damage Risk (Indo-Gangetic basin, Maharashtra, Kerala, parts of Gujarat, Rajasthan, MP)
+    elif (lat > 20.0 and lat < 29.0 and lon > 70.0 and lon < 85.0) or (lat > 8.0 and lat < 13.0 and lon > 75.0 and lon < 78.0):
+        return "Zone III (Moderate)"
+    # Zone II: Low Damage Risk (Peninsular India, remaining parts)
+    else:
+        return "Zone II (Low)"
+
 
 def lookup_drinking_water_status(village: str, state: str, district: str, csv_path=None):
     return None  # Placeholder
