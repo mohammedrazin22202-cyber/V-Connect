@@ -661,180 +661,6 @@ Keep your response concise, professional, structured in clear Markdown, using he
     }
 
     // Local Expert Policy Recommendations Generator
-    const fallbacks = {
-      infrastructure: {
-        alignment: "Jal Jeevan Mission & Swachh Bharat Mission (Grameen)",
-        intervention: "Expand piped drinking water taps and execute solid/liquid waste management infrastructure in public spaces.",
-        actionItem: "Implement concrete village drainage networks and upgrade electricity grid substations to ensure at least 18+ hours of daily power supply."
-      },
-      education: {
-        alignment: "Samagra Shiksha Abhiyan & PM SHRI Schools",
-        intervention: "Launch school dropout reduction campaigns, targeting female students. Improve digital infrastructure in schools.",
-        actionItem: "Establish a community computer lab and launch evening vocational training programs to improve youth employment literacy."
-      },
-      health: {
-        alignment: "National Health Mission (NHM) & Ayushman Bharat (PM-JAY)",
-        intervention: "Resolve health service isolation by scheduling monthly mobile medical camps and upgrading local primary health sub-centers.",
-        actionItem: "Reinforce child nutrition trackers via local Anganwadis to address the malnutrition rates effectively."
-      },
-      economy: {
-        alignment: "MGNREGA & Deendayal Antyodaya Yojana (DAY-NRLM)",
-        intervention: "Drive non-farm micro-enterprise programs and establish micro-credit linkages through Self-Help Groups (SHGs).",
-        actionItem: "Create an agricultural cooperative collection point to give farmers direct access to nearby markets, cutting out intermediate traders."
-      },
-      environment: {
-        alignment: "National Disaster Management Plan & Green India Mission",
-        intervention: "Formulate community disaster response teams and establish storm/flood shelter maps.",
-        actionItem: "Carry out community afforestation drives and run groundwater recharge/rainwater harvesting projects."
-      },
-      governance: {
-        alignment: "e-Panchayat Mission Mode Project",
-        intervention: "Digitize Gram Panchayat records and set up digital citizen kiosks for transparency.",
-        actionItem: "Hold regular open-floor *Gram Sabhas* to review budget fund utilization and citizen grievances directly."
-      },
-      social: {
-        alignment: "National Youth Policy & Mahila Shakti Kendra",
-        intervention: "Build community youth recreation spaces and setup local dispute mediation boards to encourage social cohesion.",
-        actionItem: "Implement female-led watch programs and organize vocational skill workshops specifically for youth."
-      }
-    };
-
-    const rules = [
-      {
-        key: "infrastructure",
-        check: (v) => v.drinking_water_coverage_pct !== null && v.drinking_water_coverage_pct < 60,
-        alignment: "Jal Jeevan Mission (Har Ghar Jal)",
-        finding: (v) => `Piped drinking water tap coverage is very low at **${v.drinking_water_coverage_pct.toFixed(1)}%**.`,
-        intervention: "Mobilize local Gram Panchayat development funds to lay primary distribution pipelines and connect all houses."
-      },
-      {
-        key: "infrastructure",
-        check: (v) => v.sanitation_coverage_pct !== null && v.sanitation_coverage_pct < 60,
-        alignment: "Swachh Bharat Mission (Grameen)",
-        finding: (v) => `Individual household toilet/sanitation coverage is low at **${v.sanitation_coverage_pct.toFixed(1)}%**.`,
-        intervention: "Construct community sanitary complexes and construct decentralized solid/liquid waste pits."
-      },
-      {
-        key: "infrastructure",
-        check: (v) => v.electricity_hours_per_day !== null && v.electricity_hours_per_day < 14,
-        alignment: "Deendayal Upadhyaya Gram Jyoti Yojana (DDUGJY)",
-        finding: (v) => `Grid power supply averages only **${v.electricity_hours_per_day.toFixed(1)} hours/day**.`,
-        intervention: "Install rooftop solar power grids on government buildings and upgrade transformer substation capacity."
-      },
-      {
-        key: "infrastructure",
-        check: (v) => v["internet_penetration%"] !== null && v["internet_penetration%"] < 40,
-        alignment: "BharatNet / Digital India",
-        finding: (v) => `Internet penetration is low at **${v["internet_penetration%"].toFixed(1)}%**.`,
-        intervention: "Activate a public Wi-Fi hotspot at the Gram Panchayat bhawan and community schools."
-      },
-      {
-        key: "infrastructure",
-        check: (v) => v.nearest_hospital_distance_km !== null && v.nearest_hospital_distance_km > 15,
-        alignment: "PMGSY / National Health Mission",
-        finding: (v) => `The nearest hospital is **${v.nearest_hospital_distance_km.toFixed(1)} km** away, creating severe isolation.`,
-        intervention: "Secure priority funding under PMGSY to build all-weather roads and coordinate weekly Mobile Medical Unit (MMU) visits."
-      },
-      {
-        key: "education",
-        check: (v) => v.dropout_rate !== null && v.dropout_rate > 10,
-        alignment: "Samagra Shiksha Abhiyan",
-        finding: (v) => `School dropout rate is high at **${v.dropout_rate.toFixed(1)}%**.`,
-        intervention: "Deploy student retention counselors, implement free lunch incentives, and distribute free bicycles/uniforms to reduce transition barriers."
-      },
-      {
-        key: "education",
-        check: (v) => v.female_literacy_rate !== null && v.female_literacy_rate < 60,
-        alignment: "Beti Bachao Beti Padhao",
-        finding: (v) => `Female literacy rate is low at **${v.female_literacy_rate.toFixed(1)}%**.`,
-        intervention: "Establish adult female literacy groups and build girl-friendly restroom facilities in schools to ensure a safe learning environment."
-      },
-      {
-        key: "education",
-        check: (v) => v.digital_literacy_rate !== null && v.digital_literacy_rate < 40,
-        alignment: "PMGDISHA",
-        finding: (v) => `Digital literacy is lagging at **${v.digital_literacy_rate.toFixed(1)}%**.`,
-        intervention: "Set up a free computer training center and run evening computer literacy bootcamps for local youth."
-      },
-      {
-        key: "health",
-        check: (v) => v.malnutrition_rate !== null && v.malnutrition_rate > 15,
-        alignment: "POSHAN Abhiyaan",
-        finding: (v) => `Child malnutrition rate is elevated at **${v.malnutrition_rate.toFixed(1)}%**.`,
-        intervention: "Enhance Anganwadi centers to distribute fortified supplementary nutrition and conduct regular baby weighing and nutritional audits."
-      },
-      {
-        key: "health",
-        check: (v) => v["vaccination_coverage%"] !== null && v["vaccination_coverage%"] < 80,
-        alignment: "Mission Indradhanush",
-        finding: (v) => `Immunization/vaccination coverage is suboptimal at **${v["vaccination_coverage%"].toFixed(1)}%**.`,
-        intervention: "Conduct monthly immunization drives and deploy ASHA workers to address vaccine hesitancy and track unvaccinated children."
-      },
-      {
-        key: "health",
-        check: (v) => v.avg_healthcare_access_time_min !== null && v.avg_healthcare_access_time_min > 30,
-        alignment: "Ayushman Bharat Health & Wellness Centres",
-        finding: (v) => `Average travel time to healthcare is high at **${v.avg_healthcare_access_time_min.toFixed(1)} minutes**.`,
-        intervention: "Upgrade the local sub-center to a fully operational Ayushman Bharat Health and Wellness Centre (HWC) with telemedicine."
-      },
-      {
-        key: "economy",
-        check: (v) => v.poverty_rate !== null && v.poverty_rate > 30,
-        alignment: "Deendayal Antyodaya Yojana (DAY-NRLM) & MGNREGA",
-        finding: (v) => `Poverty rate is high at **${v.poverty_rate.toFixed(1)}%**.`,
-        intervention: "Expand job card registration under MGNREGA and register women in Self-Help Groups (SHGs) to facilitate micro-credit and vocational skill training."
-      },
-      {
-        key: "economy",
-        check: (v) => v.farmer_debt_index !== null && v.farmer_debt_index > 40,
-        alignment: "PM-KISAN & Kisan Credit Card (KCC)",
-        finding: (v) => `Farmer debt stress index is elevated at **${v.farmer_debt_index.toFixed(1)}/100**.`,
-        intervention: "Conduct institutional loan enrollment drives to transition farmers away from private moneylenders and promote crop insurance."
-      },
-      {
-        key: "economy",
-        check: (v) => v["crop_yield_index%"] !== null && v["crop_yield_index%"] < 50,
-        alignment: "PM Krishi Sinchayee Yojana (PMKSY)",
-        finding: (v) => `Crop yield index is low at **${v["crop_yield_index%"].toFixed(1)}%**.`,
-        intervention: "Construct village check dams and introduce micro-irrigation systems (drip/sprinkler) to improve water-use efficiency."
-      },
-      {
-        key: "environment",
-        check: (v) => v.flood_risk_score !== null && v.flood_risk_score > 35,
-        alignment: "National Disaster Management Authority (NDMA) Guidelines",
-        finding: (v) => `Flood risk score is high at **${v.flood_risk_score.toFixed(1)}/100**.`,
-        intervention: "Formulate community evacuation routes, construct embankments along low-lying zones, and raise plinth levels of community shelters."
-      },
-      {
-        key: "environment",
-        check: (v) => v.climate_vulnerability_index !== null && v.climate_vulnerability_index > 40,
-        alignment: "National Mission for Sustainable Agriculture (NMSA)",
-        finding: (v) => `Climate vulnerability is high at **${v.climate_vulnerability_index.toFixed(1)}/100**.`,
-        intervention: "Encourage agro-forestry, introduce drought-resistant crop varieties, and construct community rainwater harvesting structures."
-      },
-      {
-        key: "governance",
-        check: (v) => (v.transparency_index !== null && v.transparency_index < 50) || (v.panchayat_efficiency_score !== null && v.panchayat_efficiency_score < 50),
-        alignment: "e-Panchayat Mission Mode Project",
-        finding: (v) => `Governance metrics are low (Panchayat Efficiency: **${(v.panchayat_efficiency_score || 50).toFixed(1)}/100**, Transparency: **${(v.transparency_index || 50).toFixed(1)}/100**).`,
-        intervention: "Digitize land and financial records, establish public service kiosks (CSC), and mandate biannual open-floor Gram Sabha reviews."
-      },
-      {
-        key: "social",
-        check: (v) => v.social_cohesion_index !== null && v.social_cohesion_index < 50,
-        alignment: "National Youth Policy / Panchayat Sports Abhiyan",
-        finding: (v) => `Social cohesion index is low at **${v.social_cohesion_index.toFixed(1)}/100**.`,
-        intervention: "Build a communal recreation center and organize regular youth sports tournaments and cultural festivals to build community trust."
-      },
-      {
-        key: "social",
-        check: (v) => v.crimes_against_women_rate !== null && v.crimes_against_women_rate > 20,
-        alignment: "One Stop Centre Scheme / Nirbhaya Fund",
-        finding: (v) => `Crime rate against women is elevated at **${v.crimes_against_women_rate.toFixed(1)}**.`,
-        intervention: "Install solar streetlights in public spaces, establish a local Mahila Suraksha committee, and coordinate self-defense training workshops."
-      }
-    ];
-
     let recommendations = `### 📋 Expert Development Policy Report for **${village.village_name}**
 **Location**: ${village.district}, ${village.state} | **Population**: ${village.total_population?.toLocaleString() ?? "N/A"}
 
@@ -844,31 +670,174 @@ Below is a customized development plan generated by the V-Connect Local Expert R
 
 `;
 
-    bottlenecks.forEach((b, idx) => {
-      recommendations += `#### ${idx + 1}. Focus Area: **${b.name}** (Score: ${b.score.toFixed(1)}/100)\n\n`;
+    bottlenecks.forEach((b, index) => {
+      recommendations += `#### ${index + 1}. Focus Area: **${b.name}** (Score: ${b.score.toFixed(1)}/100)\n\n`;
       let added = 0;
-      const domainRules = rules.filter(r => r.key === b.key);
-      domainRules.forEach(r => {
-        if (r.check(village)) {
-          recommendations += `*   **Scheme Alignment**: *${r.alignment}*\n`;
-          recommendations += `    *   *Finding*: ${r.finding(village)}\n`;
-          recommendations += `    *   *Intervention*: ${r.intervention}\n\n`;
+
+      if (b.key === "infrastructure") {
+        if (village.drinking_water_coverage_pct !== null && village.drinking_water_coverage_pct < 60) {
+          recommendations += `*   **Scheme Alignment**: *Jal Jeevan Mission (Har Ghar Jal)*\n`;
+          recommendations += `    *   *Finding*: Piped drinking water tap coverage is very low at **${village.drinking_water_coverage_pct.toFixed(1)}%**.\n`;
+          recommendations += `    *   *Intervention*: Mobilize local Gram Panchayat development funds to lay primary distribution pipelines and connect all houses.\n\n`;
           added++;
         }
-      });
-
-      if (added === 0) {
-        const fb = fallbacks[b.key];
-        recommendations += `*   **Scheme Alignment**: *${fb.alignment}*\n`;
-        recommendations += `    *   *Intervention*: ${fb.intervention}\n`;
-        recommendations += `    *   *Action Item*: ${fb.actionItem}\n\n`;
+        if (village.sanitation_coverage_pct !== null && village.sanitation_coverage_pct < 60) {
+          recommendations += `*   **Scheme Alignment**: *Swachh Bharat Mission (Grameen)*\n`;
+          recommendations += `    *   *Finding*: Individual household toilet/sanitation coverage is low at **${village.sanitation_coverage_pct.toFixed(1)}%**.\n`;
+          recommendations += `    *   *Intervention*: Construct community sanitary complexes and construct decentralized solid/liquid waste pits.\n\n`;
+          added++;
+        }
+        if (village.electricity_hours_per_day !== null && village.electricity_hours_per_day < 14) {
+          recommendations += `*   **Scheme Alignment**: *Deendayal Upadhyaya Gram Jyoti Yojana (DDUGJY)*\n`;
+          recommendations += `    *   *Finding*: Grid power supply averages only **${village.electricity_hours_per_day.toFixed(1)} hours/day**.\n`;
+          recommendations += `    *   *Intervention*: Install rooftop solar power grids on government buildings and upgrade transformer substation capacity.\n\n`;
+          added++;
+        }
+        if (village["internet_penetration%"] !== null && village["internet_penetration%"] < 40) {
+          recommendations += `*   **Scheme Alignment**: *BharatNet / Digital India*\n`;
+          recommendations += `    *   *Finding*: Internet penetration is low at **${village["internet_penetration%"].toFixed(1)}%**.\n`;
+          recommendations += `    *   *Intervention*: Activate a public Wi-Fi hotspot at the Gram Panchayat bhawan and community schools.\n\n`;
+          added++;
+        }
+        if (village.nearest_hospital_distance_km !== null && village.nearest_hospital_distance_km > 15) {
+          recommendations += `*   **Scheme Alignment**: *PMGSY / National Health Mission*\n`;
+          recommendations += `    *   *Finding*: The nearest hospital is **${village.nearest_hospital_distance_km.toFixed(1)} km** away, creating severe isolation.\n`;
+          recommendations += `    *   *Intervention*: Secure priority funding under PMGSY to build all-weather roads and coordinate weekly Mobile Medical Unit (MMU) visits.\n\n`;
+          added++;
+        }
+        if (added === 0) {
+          recommendations += `*   **Scheme Alignment**: *Jal Jeevan Mission* & *Swachh Bharat Mission (Grameen)*\n`;
+          recommendations += `    *   *Intervention*: Expand piped drinking water taps and execute solid/liquid waste management infrastructure in public spaces.\n`;
+          recommendations += `    *   *Action Item*: Implement concrete village drainage networks and upgrade electricity grid substations to ensure at least 18+ hours of daily power supply.\n\n`;
+        }
+      } else if (b.key === "education") {
+        if (village.dropout_rate !== null && village.dropout_rate > 10) {
+          recommendations += `*   **Scheme Alignment**: *Samagra Shiksha Abhiyan*\n`;
+          recommendations += `    *   *Finding*: School dropout rate is high at **${village.dropout_rate.toFixed(1)}%**.\n`;
+          recommendations += `    *   *Intervention*: Deploy student retention counselors, implement free lunch incentives, and distribute free bicycles/uniforms to reduce transition barriers.\n\n`;
+          added++;
+        }
+        if (village.female_literacy_rate !== null && village.female_literacy_rate < 60) {
+          recommendations += `*   **Scheme Alignment**: *Beti Bachao Beti Padhao*\n`;
+          recommendations += `    *   *Finding*: Female literacy rate is low at **${village.female_literacy_rate.toFixed(1)}%**.\n`;
+          recommendations += `    *   *Intervention*: Establish adult female literacy groups and build girl-friendly restroom facilities in schools to ensure a safe learning environment.\n\n`;
+          added++;
+        }
+        if (village.digital_literacy_rate !== null && village.digital_literacy_rate < 40) {
+          recommendations += `*   **Scheme Alignment**: *PMGDISHA*\n`;
+          recommendations += `    *   *Finding*: Digital literacy is lagging at **${village.digital_literacy_rate.toFixed(1)}%**.\n`;
+          recommendations += `    *   *Intervention*: Set up a free computer training center and run evening computer literacy bootcamps for local youth.\n\n`;
+          added++;
+        }
+        if (added === 0) {
+          recommendations += `*   **Scheme Alignment**: *Samagra Shiksha Abhiyan* & *PM SHRI Schools*\n`;
+          recommendations += `    *   *Intervention*: Launch school dropout reduction campaigns, targeting female students. Improve digital infrastructure in schools.\n`;
+          recommendations += `    *   *Action Item*: Establish a community computer lab and launch evening vocational training programs to improve youth employment literacy.\n\n`;
+        }
+      } else if (b.key === "health") {
+        if (village.malnutrition_rate !== null && village.malnutrition_rate > 15) {
+          recommendations += `*   **Scheme Alignment**: *POSHAN Abhiyaan*\n`;
+          recommendations += `    *   *Finding*: Child malnutrition rate is elevated at **${village.malnutrition_rate.toFixed(1)}%**.\n`;
+          recommendations += `    *   *Intervention*: Enhance Anganwadi centers to distribute fortified supplementary nutrition and conduct regular baby weighing and nutritional audits.\n\n`;
+          added++;
+        }
+        if (village["vaccination_coverage%"] !== null && village["vaccination_coverage%"] < 80) {
+          recommendations += `*   **Scheme Alignment**: *Mission Indradhanush*\n`;
+          recommendations += `    *   *Finding*: Immunization/vaccination coverage is suboptimal at **${village["vaccination_coverage%"].toFixed(1)}%**.\n`;
+          recommendations += `    *   *Intervention*: Conduct monthly immunization drives and deploy ASHA workers to address vaccine hesitancy and track unvaccinated children.\n\n`;
+          added++;
+        }
+        if (village.avg_healthcare_access_time_min !== null && village.avg_healthcare_access_time_min > 30) {
+          recommendations += `*   **Scheme Alignment**: *Ayushman Bharat Health & Wellness Centres*\n`;
+          recommendations += `    *   *Finding*: Average travel time to healthcare is high at **${village.avg_healthcare_access_time_min.toFixed(1)} minutes**.\n`;
+          recommendations += `    *   *Intervention*: Upgrade the local sub-center to a fully operational Ayushman Bharat Health and Wellness Centre (HWC) with telemedicine.\n\n`;
+          added++;
+        }
+        if (added === 0) {
+          recommendations += `*   **Scheme Alignment**: *National Health Mission (NHM)* & *Ayushman Bharat (PM-JAY)*\n`;
+          recommendations += `    *   *Intervention*: Resolve health service isolation by scheduling monthly mobile medical camps and upgrading local primary health sub-centers.\n`;
+          recommendations += `    *   *Action Item*: Reinforce child nutrition trackers via local Anganwadis to address the malnutrition rates effectively.\n\n`;
+        }
+      } else if (b.key === "economy") {
+        if (village.poverty_rate !== null && village.poverty_rate > 30) {
+          recommendations += `*   **Scheme Alignment**: *Deendayal Antyodaya Yojana (DAY-NRLM) & MGNREGA*\n`;
+          recommendations += `    *   *Finding*: Poverty rate is high at **${village.poverty_rate.toFixed(1)}%**.\n`;
+          recommendations += `    *   *Intervention*: Expand job card registration under MGNREGA and register women in Self-Help Groups (SHGs) to facilitate micro-credit and vocational skill training.\n\n`;
+          added++;
+        }
+        if (village.farmer_debt_index !== null && village.farmer_debt_index > 40) {
+          recommendations += `*   **Scheme Alignment**: *PM-KISAN & Kisan Credit Card (KCC)*\n`;
+          recommendations += `    *   *Finding*: Farmer debt stress index is elevated at **${village.farmer_debt_index.toFixed(1)}/100**.\n`;
+          recommendations += `    *   *Intervention*: Conduct institutional loan enrollment drives to transition farmers away from private moneylenders and promote crop insurance.\n\n`;
+          added++;
+        }
+        if (village["crop_yield_index%"] !== null && village["crop_yield_index%"] < 50) {
+          recommendations += `*   **Scheme Alignment**: *PM Krishi Sinchayee Yojana (PMKSY)*\n`;
+          recommendations += `    *   *Finding*: Crop yield index is low at **${village["crop_yield_index%"].toFixed(1)}%**.\n`;
+          recommendations += `    *   *Intervention*: Construct village check dams and introduce micro-irrigation systems (drip/sprinkler) to improve water-use efficiency.\n\n`;
+          added++;
+        }
+        if (added === 0) {
+          recommendations += `*   **Scheme Alignment**: *MGNREGA* & *Deendayal Antyodaya Yojana (DAY-NRLM)*\n`;
+          recommendations += `    *   *Intervention*: Drive non-farm micro-enterprise programs and establish micro-credit linkages through Self-Help Groups (SHGs).\n`;
+          recommendations += `    *   *Action Item*: Create an agricultural cooperative collection point to give farmers direct access to nearby markets, cutting out intermediate traders.\n\n`;
+        }
+      } else if (b.key === "environment") {
+        if (village.flood_risk_score !== null && village.flood_risk_score > 35) {
+          recommendations += `*   **Scheme Alignment**: *National Disaster Management Authority (NDMA) Guidelines*\n`;
+          recommendations += `    *   *Finding*: Flood risk score is high at **${village.flood_risk_score.toFixed(1)}/100**.\n`;
+          recommendations += `    *   *Intervention*: Formulate community evacuation routes, construct embankments along low-lying zones, and raise plinth levels of community shelters.\n\n`;
+          added++;
+        }
+        if (village.climate_vulnerability_index !== null && village.climate_vulnerability_index > 40) {
+          recommendations += `*   **Scheme Alignment**: *National Mission for Sustainable Agriculture (NMSA)*\n`;
+          recommendations += `    *   *Finding*: Climate vulnerability is high at **${village.climate_vulnerability_index.toFixed(1)}/100**.\n`;
+          recommendations += `    *   *Intervention*: Encourage agro-forestry, introduce drought-resistant crop varieties, and construct community rainwater harvesting structures.\n\n`;
+          added++;
+        }
+        if (added === 0) {
+          recommendations += `*   **Scheme Alignment**: *National Disaster Management Plan* & *Green India Mission*\n`;
+          recommendations += `    *   *Intervention*: Formulate community disaster response teams and establish storm/flood shelter maps.\n`;
+          recommendations += `    *   *Action Item*: Carry out community afforestation drives and run groundwater recharge/rainwater harvesting projects.\n\n`;
+        }
+      } else if (b.key === "governance") {
+        if (village.transparency_index !== null && village.transparency_index < 50 || village.panchayat_efficiency_score !== null && village.panchayat_efficiency_score < 50) {
+          recommendations += `*   **Scheme Alignment**: *e-Panchayat Mission Mode Project*\n`;
+          recommendations += `    *   *Finding*: Governance metrics are low (Panchayat Efficiency: **${(village.panchayat_efficiency_score || 50).toFixed(1)}/100**, Transparency: **${(village.transparency_index || 50).toFixed(1)}/100**).\n`;
+          recommendations += `    *   *Intervention*: Digitize land and financial records, establish public service kiosks (CSC), and mandate biannual open-floor Gram Sabha reviews.\n\n`;
+          added++;
+        }
+        if (added === 0) {
+          recommendations += `*   **Scheme Alignment**: *e-Panchayat Mission Mode Project*\n`;
+          recommendations += `    *   *Intervention*: Digitize Gram Panchayat records and set up digital citizen kiosks for transparency.\n`;
+          recommendations += `    *   *Action Item*: Hold regular open-floor *Gram Sabhas* to review budget fund utilization and citizen grievances directly.\n\n`;
+        }
+      } else if (b.key === "social") {
+        if (village.social_cohesion_index !== null && village.social_cohesion_index < 50) {
+          recommendations += `*   **Scheme Alignment**: *National Youth Policy / Panchayat Sports Abhiyan*\n`;
+          recommendations += `    *   *Finding*: Social cohesion index is low at **${village.social_cohesion_index.toFixed(1)}/100**.\n`;
+          recommendations += `    *   *Intervention*: Build a communal recreation center and organize regular youth sports tournaments and cultural festivals to build community trust.\n\n`;
+          added++;
+        }
+        if (village.crimes_against_women_rate !== null && village.crimes_against_women_rate > 20) {
+          recommendations += `*   **Scheme Alignment**: *One Stop Centre Scheme / Nirbhaya Fund*\n`;
+          recommendations += `    *   *Finding*: Crime rate against women is elevated at **${village.crimes_against_women_rate.toFixed(1)}**.\n`;
+          recommendations += `    *   *Intervention*: Install solar streetlights in public spaces, establish a local Mahila Suraksha committee, and coordinate self-defense training workshops.\n\n`;
+          added++;
+        }
+        if (added === 0) {
+          recommendations += `*   **Scheme Alignment**: *National Youth Policy* & *Mahila Shakti Kendra*\n`;
+          recommendations += `    *   *Intervention*: Build community youth recreation spaces and setup local dispute mediation boards to encourage social cohesion.\n`;
+          recommendations += `    *   *Action Item*: Implement female-led watch programs and organize vocational skill workshops specifically for youth.\n\n`;
+        }
       }
     });
 
     recommendations += `---
 *Note: This policy brief was generated automatically by the V-Connect local expert rule-based policy analysis engine.*`;
 
-    res.json({ success: true, method: "local", recommendations });  } catch (err) {
+    res.json({ success: true, method: "local", recommendations });
+  } catch (err) {
     console.error("Recommendations error:", err.message);
     res.status(500).json({ error: err.message });
   }
