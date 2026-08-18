@@ -113,8 +113,32 @@ def lookup_seismic_zone(lat: float, lon: float, csv_path=None):
 
 
 def lookup_drinking_water_status(village: str, state: str, district: str, csv_path=None):
-    """Query local SQLite database to retrieve drinking water coverage percentage."""
+def lookup_drinking_water_status(village: str, state: str, district: str, csv_path=None):
+    """Query the local SQLite database to fetch the drinking water coverage metric."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(base_dir, "server", "vconnect.db")
+    if not os.path.exists(db_path):
+        db_path = os.path.join(base_dir, "vconnect.db")
+    try:
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("SELECT drinking_water_coverage_pct FROM villages WHERE LOWER(village_name) = ? AND LOWER(district) = ? AND LOWER(state) = ?", 
+                    (village.strip().lower(), district.strip().lower(), state.strip().lower()))
+        row = cur.fetchone()
+        conn.close()
+        if row and row[0] is not None:
+            coverage = row[0]
+            if coverage >= 80:
+                return f"Fully Covered ({coverage:.1f}%)"
+            elif coverage >= 50:
+                return f"Partially Covered ({coverage:.1f}%)"
+            else:
+                return f"Scarcity/Low Coverage ({coverage:.1f}%)"
+    except Exception as e:
+        print(f"Error querying drinking water status: {e}")
     return "Insufficient Data (Local Fallback)"
+
 
 def get_disaster_alerts(lat: float, lon: float, api_key=None):
     return None  # Placeholder
