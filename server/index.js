@@ -700,7 +700,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
     };
 
     const rules = [
-
+      {
+        key: "infrastructure",
+        check: (v) => v.drinking_water_coverage_pct !== null && v.drinking_water_coverage_pct < 60,
+        alignment: "Jal Jeevan Mission (Har Ghar Jal)",
+        finding: (v) => `Piped drinking water tap coverage is very low at **${v.drinking_water_coverage_pct.toFixed(1)}%**.`,
+        intervention: "Mobilize local Gram Panchayat development funds to lay primary distribution pipelines and connect all houses."
+      }
     ];
 
     let recommendations = `### 📋 Expert Development Policy Report for **${village.village_name}**
