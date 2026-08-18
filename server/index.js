@@ -825,6 +825,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "National Youth Policy / Panchayat Sports Abhiyan",
         finding: (v) => `Social cohesion index is low at **${v.social_cohesion_index.toFixed(1)}/100**.`,
         intervention: "Build a communal recreation center and organize regular youth sports tournaments and cultural festivals to build community trust."
+      },
+      {
+        key: "social",
+        check: (v) => v.crimes_against_women_rate !== null && v.crimes_against_women_rate > 20,
+        alignment: "One Stop Centre Scheme / Nirbhaya Fund",
+        finding: (v) => `Crime rate against women is elevated at **${v.crimes_against_women_rate.toFixed(1)}**.`,
+        intervention: "Install solar streetlights in public spaces, establish a local Mahila Suraksha committee, and coordinate self-defense training workshops."
       }
     ];
 
