@@ -706,6 +706,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "Jal Jeevan Mission (Har Ghar Jal)",
         finding: (v) => `Piped drinking water tap coverage is very low at **${v.drinking_water_coverage_pct.toFixed(1)}%**.`,
         intervention: "Mobilize local Gram Panchayat development funds to lay primary distribution pipelines and connect all houses."
+      },
+      {
+        key: "infrastructure",
+        check: (v) => v.sanitation_coverage_pct !== null && v.sanitation_coverage_pct < 60,
+        alignment: "Swachh Bharat Mission (Grameen)",
+        finding: (v) => `Individual household toilet/sanitation coverage is low at **${v.sanitation_coverage_pct.toFixed(1)}%**.`,
+        intervention: "Construct community sanitary complexes and construct decentralized solid/liquid waste pits."
       }
     ];
 
