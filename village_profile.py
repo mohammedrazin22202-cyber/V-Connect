@@ -296,6 +296,7 @@ def process_villages(input_path: str, output_prefix: str, headless: bool = False
                 profile.notes = "Coordinates not found"
             else:
                 profile.seismic_zone = lookup_seismic_zone(lat, lon)
+                profile.drinking_water = lookup_drinking_water_status(village, state, district)
 
             for ftype in facility_types:
                 fac = get_nearest_facility(page, f"{village} {district} {state}", ftype, profile.lat, profile.lon)
