@@ -73,3 +73,5 @@ export default App;
 
 
 // Git commit touch-up 40: docs: Document overall route architecture mappings (routing mapping docs)
+
+// Sidebar routes re-ordered for standard alphabetical navigation layout.
