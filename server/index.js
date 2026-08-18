@@ -741,6 +741,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "Samagra Shiksha Abhiyan",
         finding: (v) => `School dropout rate is high at **${v.dropout_rate.toFixed(1)}%**.`,
         intervention: "Deploy student retention counselors, implement free lunch incentives, and distribute free bicycles/uniforms to reduce transition barriers."
+      },
+      {
+        key: "education",
+        check: (v) => v.female_literacy_rate !== null && v.female_literacy_rate < 60,
+        alignment: "Beti Bachao Beti Padhao",
+        finding: (v) => `Female literacy rate is low at **${v.female_literacy_rate.toFixed(1)}%**.`,
+        intervention: "Establish adult female literacy groups and build girl-friendly restroom facilities in schools to ensure a safe learning environment."
       }
     ];
 
