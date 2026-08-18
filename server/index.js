@@ -727,6 +727,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "BharatNet / Digital India",
         finding: (v) => `Internet penetration is low at **${v["internet_penetration%"].toFixed(1)}%**.`,
         intervention: "Activate a public Wi-Fi hotspot at the Gram Panchayat bhawan and community schools."
+      },
+      {
+        key: "infrastructure",
+        check: (v) => v.nearest_hospital_distance_km !== null && v.nearest_hospital_distance_km > 15,
+        alignment: "PMGSY / National Health Mission",
+        finding: (v) => `The nearest hospital is **${v.nearest_hospital_distance_km.toFixed(1)} km** away, creating severe isolation.`,
+        intervention: "Secure priority funding under PMGSY to build all-weather roads and coordinate weekly Mobile Medical Unit (MMU) visits."
       }
     ];
 
