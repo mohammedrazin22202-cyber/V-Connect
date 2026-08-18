@@ -94,7 +94,6 @@ class VillageProfile:
 # ----------------- Lookup Placeholders -----------------
 
 def lookup_seismic_zone(lat: float, lon: float, csv_path=None):
-def lookup_seismic_zone(lat: float, lon: float, csv_path=None):
     """Determine Indian Seismic Zone based on coordinate bounding boxes/heuristics."""
     if lat is None or lon is None:
         return "Unknown"
@@ -111,8 +110,6 @@ def lookup_seismic_zone(lat: float, lon: float, csv_path=None):
     else:
         return "Zone II (Low)"
 
-
-def lookup_drinking_water_status(village: str, state: str, district: str, csv_path=None):
 def lookup_drinking_water_status(village: str, state: str, district: str, csv_path=None):
     """Query the local SQLite database to fetch the drinking water coverage metric."""
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -139,8 +136,6 @@ def lookup_drinking_water_status(village: str, state: str, district: str, csv_pa
         print(f"Error querying drinking water status: {e}")
     return "Insufficient Data (Local Fallback)"
 
-
-def get_disaster_alerts(lat: float, lon: float, api_key=None):
 def get_disaster_alerts(lat: float, lon: float, api_key=None):
     """Locate the nearest village geographically in our database and check environmental risk scores."""
     if lat is None or lon is None:
@@ -180,7 +175,6 @@ def get_disaster_alerts(lat: float, lon: float, api_key=None):
     except Exception as e:
         print(f"Error querying disaster alerts: {e}")
     return "No active warnings (Local Engine)"
-
 
 # ----------------- Playwright Helpers -----------------
 
@@ -295,8 +289,10 @@ def process_villages(input_path: str, output_prefix: str, headless: bool = False
             if lat is None:
                 profile.notes = "Coordinates not found"
             else:
+                # Resolve indicators locally using our offline engines / DB
                 profile.seismic_zone = lookup_seismic_zone(lat, lon)
                 profile.drinking_water = lookup_drinking_water_status(village, state, district)
+                profile.disaster_alerts = get_disaster_alerts(lat, lon)
 
             for ftype in facility_types:
                 fac = get_nearest_facility(page, f"{village} {district} {state}", ftype, profile.lat, profile.lon)
