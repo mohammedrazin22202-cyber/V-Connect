@@ -294,6 +294,8 @@ def process_villages(input_path: str, output_prefix: str, headless: bool = False
             profile.lat, profile.lon = lat, lon
             if lat is None:
                 profile.notes = "Coordinates not found"
+            else:
+                profile.seismic_zone = lookup_seismic_zone(lat, lon)
 
             for ftype in facility_types:
                 fac = get_nearest_facility(page, f"{village} {district} {state}", ftype, profile.lat, profile.lon)
