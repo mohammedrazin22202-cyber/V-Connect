@@ -776,6 +776,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "Ayushman Bharat Health & Wellness Centres",
         finding: (v) => `Average travel time to healthcare is high at **${v.avg_healthcare_access_time_min.toFixed(1)} minutes**.`,
         intervention: "Upgrade the local sub-center to a fully operational Ayushman Bharat Health and Wellness Centre (HWC) with telemedicine."
+      },
+      {
+        key: "economy",
+        check: (v) => v.poverty_rate !== null && v.poverty_rate > 30,
+        alignment: "Deendayal Antyodaya Yojana (DAY-NRLM) & MGNREGA",
+        finding: (v) => `Poverty rate is high at **${v.poverty_rate.toFixed(1)}%**.`,
+        intervention: "Expand job card registration under MGNREGA and register women in Self-Help Groups (SHGs) to facilitate micro-credit and vocational skill training."
       }
     ];
 
