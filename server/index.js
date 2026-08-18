@@ -818,6 +818,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "e-Panchayat Mission Mode Project",
         finding: (v) => `Governance metrics are low (Panchayat Efficiency: **${(v.panchayat_efficiency_score || 50).toFixed(1)}/100**, Transparency: **${(v.transparency_index || 50).toFixed(1)}/100**).`,
         intervention: "Digitize land and financial records, establish public service kiosks (CSC), and mandate biannual open-floor Gram Sabha reviews."
+      },
+      {
+        key: "social",
+        check: (v) => v.social_cohesion_index !== null && v.social_cohesion_index < 50,
+        alignment: "National Youth Policy / Panchayat Sports Abhiyan",
+        finding: (v) => `Social cohesion index is low at **${v.social_cohesion_index.toFixed(1)}/100**.`,
+        intervention: "Build a communal recreation center and organize regular youth sports tournaments and cultural festivals to build community trust."
       }
     ];
 
