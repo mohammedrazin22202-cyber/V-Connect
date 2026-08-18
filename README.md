@@ -52,3 +52,7 @@ cd client
 npm install
 npm run dev
 ```
+
+
+## Offline & Free-tier Execution
+The application includes a rule-based expert system on the backend that provides detailed, village-specific policy briefs entirely offline, removing any dependencies on paid external APIs.
