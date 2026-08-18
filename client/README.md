@@ -13,3 +13,7 @@ This directory contains the React frontend application built using Vite, Tailwin
 - `npm run dev`: Runs the app in development mode on `http://localhost:5173`.
 - `npm run build`: Builds the app for production in the `dist` folder.
 - `npm run preview`: Previews the production build locally.
+
+
+### Offline Data Lookups
+The village profile scraping engine utilizes a local SQLite database copy and coordinate bounding boxes to resolve environmental warnings and seismic risk zones locally without requesting external geocoding API keys.
