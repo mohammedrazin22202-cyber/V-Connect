@@ -811,6 +811,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "National Mission for Sustainable Agriculture (NMSA)",
         finding: (v) => `Climate vulnerability is high at **${v.climate_vulnerability_index.toFixed(1)}/100**.`,
         intervention: "Encourage agro-forestry, introduce drought-resistant crop varieties, and construct community rainwater harvesting structures."
+      },
+      {
+        key: "governance",
+        check: (v) => (v.transparency_index !== null && v.transparency_index < 50) || (v.panchayat_efficiency_score !== null && v.panchayat_efficiency_score < 50),
+        alignment: "e-Panchayat Mission Mode Project",
+        finding: (v) => `Governance metrics are low (Panchayat Efficiency: **${(v.panchayat_efficiency_score || 50).toFixed(1)}/100**, Transparency: **${(v.transparency_index || 50).toFixed(1)}/100**).`,
+        intervention: "Digitize land and financial records, establish public service kiosks (CSC), and mandate biannual open-floor Gram Sabha reviews."
       }
     ];
 
