@@ -325,3 +325,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     process_villages(args.input, args.output, args.headless, args.limit)
+
+# Clean formatting note: SQLite3 imports resolved inside helpers for thread-safety.
