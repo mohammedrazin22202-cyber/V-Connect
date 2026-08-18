@@ -769,6 +769,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "Mission Indradhanush",
         finding: (v) => `Immunization/vaccination coverage is suboptimal at **${v["vaccination_coverage%"].toFixed(1)}%**.`,
         intervention: "Conduct monthly immunization drives and deploy ASHA workers to address vaccine hesitancy and track unvaccinated children."
+      },
+      {
+        key: "health",
+        check: (v) => v.avg_healthcare_access_time_min !== null && v.avg_healthcare_access_time_min > 30,
+        alignment: "Ayushman Bharat Health & Wellness Centres",
+        finding: (v) => `Average travel time to healthcare is high at **${v.avg_healthcare_access_time_min.toFixed(1)} minutes**.`,
+        intervention: "Upgrade the local sub-center to a fully operational Ayushman Bharat Health and Wellness Centre (HWC) with telemedicine."
       }
     ];
 
