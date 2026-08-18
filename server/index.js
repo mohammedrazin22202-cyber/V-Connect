@@ -748,6 +748,13 @@ Keep your response concise, professional, structured in clear Markdown, using he
         alignment: "Beti Bachao Beti Padhao",
         finding: (v) => `Female literacy rate is low at **${v.female_literacy_rate.toFixed(1)}%**.`,
         intervention: "Establish adult female literacy groups and build girl-friendly restroom facilities in schools to ensure a safe learning environment."
+      },
+      {
+        key: "education",
+        check: (v) => v.digital_literacy_rate !== null && v.digital_literacy_rate < 40,
+        alignment: "PMGDISHA",
+        finding: (v) => `Digital literacy is lagging at **${v.digital_literacy_rate.toFixed(1)}%**.`,
+        intervention: "Set up a free computer training center and run evening computer literacy bootcamps for local youth."
       }
     ];
 
