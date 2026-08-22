@@ -17,7 +17,6 @@ export default function AdminPortal() {
 
   // Ingestion Validator states
   const [pastedCSV, setPastedCSV] = useState('');
-  const [csvFile, setCsvFile] = useState(null);
   const [validationLogs, setValidationLogs] = useState([]);
   const [validating, setValidating] = useState(false);
   const [ingesting, setIngesting] = useState(false);
