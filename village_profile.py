@@ -118,7 +118,7 @@ def lookup_drinking_water_status(village: str, state: str, district: str, csv_pa
         db_path = os.path.join(base_dir, "vconnect.db")
     try:
         import sqlite3
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, timeout=10.0)
         cur = conn.cursor()
         cur.execute("SELECT drinking_water_coverage_pct FROM villages WHERE LOWER(village_name) = ? AND LOWER(district) = ? AND LOWER(state) = ?", 
                     (village.strip().lower(), district.strip().lower(), state.strip().lower()))
@@ -146,7 +146,7 @@ def get_disaster_alerts(lat: float, lon: float, api_key=None):
         db_path = os.path.join(base_dir, "vconnect.db")
     try:
         import sqlite3
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, timeout=10.0)
         cur = conn.cursor()
         # Find nearest village in the database that has coordinates
         cur.execute("""
