@@ -15,7 +15,15 @@ export default function ScoreBar({ score, label, size = 'md' }) {
   if (size === 'mini') {
     return (
       <div className="score-bar-wrapper score-bar--mini">
-        <div className="score-bar-container" style={{ height: 4, background: bgColor }}>
+        <div
+          className="score-bar-container"
+          style={{ height: 4, background: bgColor }}
+          role="progressbar"
+          aria-valuenow={value}
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-label={label || 'Score'}
+        >
           <div
             className="score-bar-fill"
             style={{
@@ -38,7 +46,15 @@ export default function ScoreBar({ score, label, size = 'md' }) {
   return (
     <div className="score-bar-wrapper">
       {label && <span className="score-bar-label">{label}</span>}
-      <div className="score-bar-container" style={{ height: barHeight, background: bgColor }}>
+      <div
+        className="score-bar-container"
+        style={{ height: barHeight, background: bgColor }}
+        role="progressbar"
+        aria-valuenow={value}
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-label={label || 'Score'}
+      >
         <div
           className="score-bar-fill"
           style={{
