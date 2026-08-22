@@ -211,7 +211,7 @@ export default function DistrictProfiler() {
                 </tr>
               </thead>
               <tbody>
-                {filteredDistricts.map((d, index) => (
+                {filteredDistricts.map(d => (
                   <tr
                     key={`${d.state}-${d.district}`}
                     onClick={() => handleSelectDistrict(d)}

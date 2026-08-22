@@ -583,7 +583,7 @@ export default function PolicySandbox() {
                   </tr>
                 </thead>
                 <tbody>
-                  {simulation.villages.map((v, idx) => {
+                  {simulation.villages.map(v => {
                     const vB = simulationB.villages.find(vb => vb.village_id === v.village_id) || {};
                     return (
                       <tr key={v.village_id} className="table-row">
