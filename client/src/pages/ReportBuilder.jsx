@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { fetchRankings, fetchVillage, fetchVillageHistory, fetchVillageRecommendations } from '../api';
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const DOMAIN_LABELS = {
   economy_score: 'Economy',
@@ -33,7 +33,6 @@ export default function ReportBuilder() {
 
   // History and AI recommendations states
   const [history, setHistory] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
   const [aiRecommendations, setAiRecommendations] = useState('');
   const [loadingAi, setLoadingAi] = useState(false);
   const [aiError, setAiError] = useState(null);
