@@ -17,6 +17,7 @@ import VillageDataEditor from './pages/VillageDataEditor';
 import Sidebar from './components/Sidebar';
 import './index.css';
 
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -32,6 +33,7 @@ function App() {
         >
           ☰
         </button>
+
 
         {/* Mobile overlay */}
         <div
