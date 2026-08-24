@@ -268,6 +268,25 @@ export default function VillageDetail() {
 
   const localMapRef = useRef(null);
 
+  // Real-time OSM state variables
+  const [osmFacilities, setOsmFacilities] = useState([]);
+  const [loadingOsm, setLoadingOsm] = useState(false);
+  const [osmError, setOsmError] = useState(null);
+  const [osmQueried, setOsmQueried] = useState(false);
+  const [osmFilter, setOsmFilter] = useState('all');
+  const [osmSearch, setOsmSearch] = useState('');
+  const osmMarkersRef = useRef([]);
+
+  // Reset OSM states if village changes
+  useEffect(() => {
+    setOsmFacilities([]);
+    setOsmQueried(false);
+    setOsmError(null);
+    setOsmSearch('');
+    setOsmFilter('all');
+    osmMarkersRef.current = [];
+  }, [id]);
+
   // Fetch initial data
   useEffect(() => {
     setLoading(true);
