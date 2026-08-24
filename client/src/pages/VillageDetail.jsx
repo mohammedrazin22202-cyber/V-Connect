@@ -874,6 +874,43 @@ out center 40;`;
         </div>
       </div>
 
+      {/* Live OpenStreetMap Amenities Explorer Card */}
+      <div className="glass-panel" style={{ padding: '24px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+          <div>
+            <h3 className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              🌐 Live OpenStreetMap Nearby Explorer
+            </h3>
+            <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', marginBottom: 0 }}>
+              Query live, public geodata from the OpenStreetMap registry to identify actual facilities within 15 km of this village.
+            </p>
+          </div>
+          <button 
+            className={`btn ${loadingOsm ? 'btn--ghost' : 'btn--primary'}`} 
+            onClick={discoverOsmAmenities}
+            disabled={loadingOsm}
+            style={{ padding: '8px 16px', fontSize: '12px', whiteSpace: 'nowrap' }}
+          >
+            {loadingOsm ? 'Searching OSM...' : osmQueried ? '🔄 Re-Query OSM' : '🔍 Discover Nearby Amenities'}
+          </button>
+        </div>
+
+        {loadingOsm && (
+          <div style={{ height: '140px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="spinner" />
+            <span style={{ marginLeft: '10px', marginTop: '12px', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+              Querying Overpass API for schools, hospitals, transit, and governance hubs...
+            </span>
+          </div>
+        )}
+
+        {osmError && (
+          <div style={{ padding: '12px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#fca5a5', fontSize: '12.5px' }}>
+            <strong>Error querying OpenStreetMap:</strong> {osmError}. Please check your internet connection or try again.
+          </div>
+        )}
+      </div>
+
       {/* Historical Trends Time-Series Card */}
       <div className="glass-panel" style={{ padding: '24px', marginBottom: '24px' }}>
         <h3 className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
