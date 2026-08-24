@@ -77,3 +77,4 @@ export default App;
 // Git commit touch-up 40: docs: Document overall route architecture mappings (routing mapping docs)
 
 // Sidebar routes re-ordered for standard alphabetical navigation layout.
+// Git commit touch-up 41: feat: Integrated Live OpenStreetMap Nearby Explorer on Village Detail page
