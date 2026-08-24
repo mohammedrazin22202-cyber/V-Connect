@@ -909,6 +909,105 @@ out center 40;`;
             <strong>Error querying OpenStreetMap:</strong> {osmError}. Please check your internet connection or try again.
           </div>
         )}
+
+        {osmQueried && !loadingOsm && !osmError && (
+          <div>
+            {osmFacilities.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px 0', fontSize: '13px' }}>
+                No facilities registered in OpenStreetMap within 15 km of these coordinates.
+              </p>
+            ) : (
+              <div>
+                {/* Search and Filters */}
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }} className="no-print">
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="Filter by name..."
+                    value={osmSearch}
+                    onChange={e => setOsmSearch(e.target.value)}
+                    style={{ flex: 1, minWidth: '200px', fontSize: '13px', padding: '6px 12px' }}
+                  />
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {['all', 'health', 'education', 'economy', 'transit', 'governance'].map(cat => (
+                      <button
+                        key={cat}
+                        className={`preset-btn ${osmFilter === cat ? 'preset-btn--active' : ''}`}
+                        onClick={() => setOsmFilter(cat)}
+                        style={{ padding: '4px 10px', fontSize: '11px', textTransform: 'capitalize' }}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Table of facilities */}
+                <div style={{ overflowX: 'auto', maxHeight: '300px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+                        <th style={{ padding: '8px 12px' }}>Name</th>
+                        <th style={{ padding: '8px 12px' }}>Category</th>
+                        <th style={{ padding: '8px 12px' }}>Distance</th>
+                        <th style={{ padding: '8px 12px' }} className="no-print">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {osmFacilities
+                        .filter(f => osmFilter === 'all' || f.category === osmFilter)
+                        .filter(f => !osmSearch || f.name.toLowerCase().includes(osmSearch.toLowerCase()))
+                        .map(fac => (
+                          <tr 
+                            key={fac.id} 
+                            style={{ borderBottom: '1px solid rgba(255,255,255,0.02)', cursor: 'pointer' }}
+                            onClick={() => highlightOsmFacility(fac)}
+                            className="table-row"
+                          >
+                            <td style={{ padding: '8px 12px', fontWeight: '500', color: '#fff' }}>
+                              <span style={{ marginRight: '6px' }}>{fac.icon}</span>
+                              {fac.name}
+                            </td>
+                            <td style={{ padding: '8px 12px' }}>
+                              <span 
+                                style={{ 
+                                  padding: '2px 8px', 
+                                  borderRadius: '12px', 
+                                  fontSize: '10px', 
+                                  fontWeight: 'bold', 
+                                  background: `${fac.color}15`, 
+                                  color: fac.color,
+                                  border: `1px solid ${fac.color}30` 
+                                }}
+                              >
+                                {fac.category.toUpperCase()}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 12px', color: 'var(--accent)', fontWeight: '600' }}>
+                              {fac.distance.toFixed(2)} km
+                            </td>
+                            <td style={{ padding: '8px 12px' }} className="no-print">
+                              <button 
+                                className="btn btn--ghost" 
+                                style={{ padding: '2px 8px', fontSize: '11px', border: '1px solid var(--border)' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  highlightOsmFacility(fac);
+                                }}
+                              >
+                                🎯 Locate
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Historical Trends Time-Series Card */}
