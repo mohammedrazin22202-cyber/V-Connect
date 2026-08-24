@@ -299,6 +299,66 @@ export default function VillageDetail() {
     return R * c;
   }, []);
 
+  const highlightOsmFacility = useCallback((fac) => {
+    if (!localMapRef.current || !window.L) return;
+    const map = localMapRef.current;
+    map.setView([fac.lat, fac.lon], 15);
+    
+    // Find the marker that matches the coordinates and open its popup
+    map.eachLayer(layer => {
+      if (layer instanceof window.L.CircleMarker) {
+        const latLng = layer.getLatLng();
+        if (Math.abs(latLng.lat - fac.lat) < 0.0001 && Math.abs(latLng.lng - fac.lon) < 0.0001) {
+          layer.openPopup();
+        }
+      }
+    });
+  }, []);
+
+  const plotOsmOnMap = useCallback((facilitiesList) => {
+    if (!localMapRef.current || !window.L || !village) return;
+    const map = localMapRef.current;
+
+    // Clear previous OSM markers
+    osmMarkersRef.current.forEach(layer => map.removeLayer(layer));
+    osmMarkersRef.current = [];
+
+    const center = [village.latitude, village.longitude];
+    const mapPoints = [center];
+
+    facilitiesList.forEach(fac => {
+      const coord = [fac.lat, fac.lon];
+      mapPoints.push(coord);
+
+      // Circle marker for OSM facility
+      const marker = window.L.circleMarker(coord, {
+        radius: 6,
+        fillColor: fac.color,
+        color: '#ffffff',
+        weight: 1.5,
+        opacity: 0.9,
+        fillOpacity: 0.85
+      })
+      .addTo(map)
+      .bindPopup(`<strong>${fac.icon} ${fac.name}</strong><br/>Category: ${fac.category.toUpperCase()}<br/>Distance: ${fac.distance.toFixed(2)} km`);
+
+      // Dotted connector line
+      const polyline = window.L.polyline([center, coord], {
+        color: fac.color,
+        weight: 1.2,
+        dashArray: '3, 6',
+        opacity: 0.5
+      }).addTo(map);
+
+      osmMarkersRef.current.push(marker, polyline);
+    });
+
+    // Zoom out map bounds to show the new real facilities
+    if (mapPoints.length > 1) {
+      map.fitBounds(mapPoints, { padding: [40, 40] });
+    }
+  }, [village]);
+
   const discoverOsmAmenities = useCallback(async () => {
     if (!village || !village.latitude || !village.longitude) return;
     setLoadingOsm(true);
