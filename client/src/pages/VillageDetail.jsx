@@ -299,6 +299,106 @@ export default function VillageDetail() {
     return R * c;
   }, []);
 
+  const discoverOsmAmenities = useCallback(async () => {
+    if (!village || !village.latitude || !village.longitude) return;
+    setLoadingOsm(true);
+    setOsmError(null);
+    setOsmQueried(true);
+
+    const lat = village.latitude;
+    const lon = village.longitude;
+    const radius = 15000; // 15 km
+
+    // Overpass QL query searching for schools, clinics, markets, transit, etc.
+    const query = `[out:json][timeout:15];
+(
+  node["amenity"~"hospital|clinic|pharmacy|school|college|bank|marketplace|post_office|police|townhall"](around:${radius},${lat},${lon});
+  node["highway"="bus_stop"](around:${radius},${lat},${lon});
+  node["railway"="station"](around:${radius},${lat},${lon});
+  way["amenity"~"hospital|school|college|marketplace"](around:${radius},${lat},${lon});
+);
+out center 40;`;
+
+    try {
+      const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+      if (!response.ok) {
+        throw new Error('Overpass API returned status ' + response.status);
+      }
+      const data = await response.json();
+      
+      const elements = data.elements || [];
+      const parsed = elements.map(el => {
+        const itemLat = el.lat || (el.center && el.center.lat);
+        const itemLon = el.lon || (el.center && el.center.lon);
+        
+        if (!itemLat || !itemLon) return null;
+
+        const distance = getDistance(lat, lon, itemLat, itemLon);
+        
+        // Categorize
+        let category = 'other';
+        let color = '#a8a29e';
+        let icon = '📍';
+        
+        const amenity = el.tags?.amenity || '';
+        const highway = el.tags?.highway || '';
+        const railway = el.tags?.railway || '';
+        
+        if (['hospital', 'clinic', 'pharmacy', 'doctors', 'dentist'].includes(amenity)) {
+          category = 'health';
+          color = '#ef4444';
+          icon = '🏥';
+        } else if (['school', 'college', 'university', 'kindergarten', 'library'].includes(amenity)) {
+          category = 'education';
+          color = '#6366f1';
+          icon = '🏫';
+        } else if (['bank', 'atm', 'marketplace', 'post_office'].includes(amenity)) {
+          category = 'economy';
+          color = '#f59e0b';
+          icon = '🪙';
+        } else if (highway === 'bus_stop' || railway === 'station' || ['bus_station', 'ferry_terminal'].includes(amenity)) {
+          category = 'transit';
+          color = '#06b6d4';
+          icon = '🚌';
+        } else if (['police', 'townhall', 'courthouse', 'fire_station'].includes(amenity)) {
+          category = 'governance';
+          color = '#10b981';
+          icon = '🏛️';
+        }
+
+        let name = el.tags?.name || el.tags?.operator || '';
+        if (!name) {
+          name = category.charAt(0).toUpperCase() + category.slice(1) + ' Facility';
+        }
+
+        return {
+          id: el.id,
+          name,
+          category,
+          color,
+          icon,
+          lat: itemLat,
+          lon: itemLon,
+          distance,
+          tags: el.tags || {}
+        };
+      }).filter(Boolean);
+
+      // Sort by distance ascending
+      parsed.sort((a, b) => a.distance - b.distance);
+      setOsmFacilities(parsed);
+      
+      if (typeof plotOsmOnMap === 'function') {
+        plotOsmOnMap(parsed);
+      }
+    } catch (err) {
+      console.error(err);
+      setOsmError(err.message || 'Failed to fetch OpenStreetMap coordinates.');
+    } finally {
+      setLoadingOsm(false);
+    }
+  }, [village, getDistance]);
+
   // Fetch initial data
   useEffect(() => {
     setLoading(true);
