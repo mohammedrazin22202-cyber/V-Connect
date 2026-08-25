@@ -67,7 +67,7 @@ export default function AnomalyHub() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('economic');
 
-  useEffect(() => {
+  const loadAnomalies = () => {
     setLoading(true);
     fetchAnomalies()
       .then(res => {
@@ -78,6 +78,10 @@ export default function AnomalyHub() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadAnomalies();
   }, []);
 
   if (loading) {
@@ -102,11 +106,18 @@ export default function AnomalyHub() {
 
   return (
     <div className="dashboard">
-      <header className="dashboard-header">
+      <header className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 className="page-title">Diagnostic & Anomaly Hub</h2>
           <p className="page-subtitle">Identify data errors, statistical outliers, and localized policy bottlenecks in real-time</p>
         </div>
+        <button 
+          onClick={loadAnomalies} 
+          className="btn btn-secondary"
+          style={{ cursor: 'pointer', height: 'fit-content' }}
+        >
+          🔄 Refresh Outliers
+        </button>
       </header>
 
       {/* Summary Stat Cards */}
