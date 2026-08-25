@@ -140,9 +140,25 @@ export default function VillageDataEditor() {
     fetchVillage(vId)
       .then(res => {
         setVillageId(vId);
-        setVillageData(res);
-        if (res && res.raw) {
-          setFormData(res.raw);
+        if (res && res.village) {
+          setVillageData(res.village);
+          const initialForm = {
+            total_population: res.village.total_population,
+            households: res.village.households,
+            gram_panchayat: res.village.gram_panchayat,
+            block: res.village.block
+          };
+          if (res.metrics) {
+            Object.values(res.metrics).forEach(items => {
+              items.forEach(item => {
+                initialForm[item.name] = item.value;
+              });
+            });
+          }
+          setFormData(initialForm);
+        } else {
+          setVillageData(null);
+          setFormData({});
         }
       })
       .catch(err => {
@@ -318,7 +334,7 @@ export default function VillageDataEditor() {
               <span className="badge" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>
                 Active Record
               </span>
-              <h3 className="section-title" style={{ marginTop: '6px', marginBottom: '2px' }}>{villageData.name}</h3>
+              <h3 className="section-title" style={{ marginTop: '6px', marginBottom: '2px' }}>{villageData.village_name}</h3>
               <p className="text-muted" style={{ fontSize: '12px', margin: 0 }}>
                 District: <strong>{villageData.district}</strong> | State: <strong>{villageData.state}</strong> | ID: <strong>{villageId}</strong>
               </p>
