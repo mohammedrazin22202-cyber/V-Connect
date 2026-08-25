@@ -22,11 +22,22 @@ app.use(express.json());
 // ── Database Connection ────────────────────────────────────────────────
 let db;
 try {
-  db = new Database(DB_PATH); // Read-write connection enabled
-  db.pragma("cache_size = -128000"); // 128MB cache
+  // Establish read-write database connection and apply performant pragmas
+  db = new Database(DB_PATH);
+  
+  // Set cache size to 128MB (cache_size = -128000 specifies size in kibibytes)
+  db.pragma("cache_size = -128000"); 
+  
+  // Store temp tables in memory to avoid disk write overhead
   db.pragma("temp_store = MEMORY");
-  db.pragma("mmap_size = 268435456"); // 256MB mmap
+  
+  // Configure 256MB memory map size for faster file access via kernel OS pages
+  db.pragma("mmap_size = 268435456"); 
+  
+  // Enable Write-Ahead Logging (WAL) journal mode for concurrent read-write speed
   db.pragma("journal_mode = WAL");
+  
+  // Create descending indexes on overall and domain scores to optimize paginated leaderboard sorting
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_overall ON domain_scores(overall_score DESC)").run();
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_economy ON domain_scores(economy_score DESC)").run();
   db.prepare("CREATE INDEX IF NOT EXISTS idx_scores_education ON domain_scores(education_score DESC)").run();
