@@ -130,16 +130,48 @@ export default function VillageTargetPlanner() {
     setLoadingVillage(true);
     fetchVillage(v.village_id)
       .then(res => {
-        setVillage(res);
-        if (res && res.scores) {
+        if (res && res.village) {
+          const scores = {
+            economy_score: res.village.economy_score,
+            education_score: res.village.education_score,
+            health_score: res.village.health_score,
+            infrastructure_score: res.village.infrastructure_score,
+            environment_score: res.village.environment_score,
+            governance_score: res.village.governance_score,
+            social_score: res.village.social_score,
+            overall_score: res.village.overall_score,
+            overall_rank: res.village.overall_rank,
+          };
+          
+          const raw = {
+            total_population: res.village.total_population,
+            households: res.village.households,
+            gram_panchayat: res.village.gram_panchayat,
+            block: res.village.block,
+          };
+          if (res.metrics) {
+            Object.values(res.metrics).forEach(items => {
+              items.forEach(item => {
+                raw[item.name] = item.value;
+              });
+            });
+          }
+
+          const reconstructedVillage = {
+            ...res.village,
+            scores,
+            raw
+          };
+
+          setVillage(reconstructedVillage);
           setTargets({
-            economy: res.scores.economy_score || 50,
-            education: res.scores.education_score || 50,
-            health: res.scores.health_score || 50,
-            infrastructure: res.scores.infrastructure_score || 50,
-            environment: res.scores.environment_score || 50,
-            governance: res.scores.governance_score || 50,
-            social: res.scores.social_score || 50
+            economy: scores.economy_score || 50,
+            education: scores.education_score || 50,
+            health: scores.health_score || 50,
+            infrastructure: scores.infrastructure_score || 50,
+            environment: scores.environment_score || 50,
+            governance: scores.governance_score || 50,
+            social: scores.social_score || 50
           });
         }
       })
@@ -312,7 +344,7 @@ export default function VillageTargetPlanner() {
               <span className="badge" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>
                 Target Goals
               </span>
-              <h3 className="section-title" style={{ marginTop: '6px', marginBottom: '2px' }}>{village.name}</h3>
+              <h3 className="section-title" style={{ marginTop: '6px', marginBottom: '2px' }}>{village.village_name}</h3>
               <p className="text-muted" style={{ fontSize: '12px', margin: 0 }}>
                 {village.district}, {village.state} | Population: <strong>{village.raw.total_population?.toLocaleString()}</strong>
               </p>
