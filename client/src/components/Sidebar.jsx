@@ -65,9 +65,13 @@ export default function Sidebar({ isOpen, onClose }) {
   );
 }
 
-// Registered route path for predictive analytics sandbox
-
-// Git commit touch-up 33: style: Optimize hover effect transitions for new sidebar icons (transition)
-
-
-// Git commit touch-up 41: docs: Update navigation icons descriptions (sidebar navigation comments)
+/**
+ * Sidebar Navigation Component for VConnect.
+ * Renders the brand logo, a list of reactive navigation links mapped to application routes,
+ * and current dataset status indicators showing coverage and system metadata.
+ *
+ * @component
+ * @param {Object} props - Component properties.
+ * @param {boolean} props.isOpen - Whether the mobile responsive drawer is open.
+ * @param {Function} props.onClose - Callback triggered on closing the sidebar drawer.
+ */
