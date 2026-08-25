@@ -2150,10 +2150,12 @@ app.post("/api/villages/:id/update-metrics", (req, res) => {
     );
 
     db.prepare(`
-      UPDATE domain_scores 
-      SET overall_rank = (
-        SELECT COUNT(*) FROM domain_scores d2 WHERE d2.overall_score > domain_scores.overall_score
-      ) + 1
+      WITH Ranked AS (
+        SELECT village_id, RANK() OVER (ORDER BY overall_score DESC) as new_rank
+        FROM domain_scores
+      )
+      UPDATE domain_scores
+      SET overall_rank = (SELECT new_rank FROM Ranked WHERE Ranked.village_id = domain_scores.village_id)
     `).run();
 
     rebuildDashboardStats();
