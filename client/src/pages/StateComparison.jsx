@@ -162,6 +162,11 @@ export default function StateComparison() {
             </button>
           )}
         </div>
+        {selectedStates.length > 0 && (
+          <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--text-muted)' }}>
+            💡 Tip: Comparing <strong>{selectedStates.length}</strong> states side-by-side using Recharts charts.
+          </div>
+        )}
       </div>
 
       {/* Chart */}
