@@ -9,6 +9,18 @@ const INDICATORS = [
   { key: 'economic_poverty', label: '🌾 Economic Stress (Poverty Rate > 40%)' }
 ];
 
+const getTileUrl = (mode) => {
+  if (mode === 'light') return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  if (mode === 'satellite') return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+  return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+};
+
+const getTileAttribution = (mode) => {
+  if (mode === 'satellite') return '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
+  if (mode === 'light') return '&copy; OpenStreetMap contributors';
+  return '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+};
+
 export default function SpatialAnalytics() {
   const [filters, setFilters] = useState({ states: [], districts: [], priorities: [] });
   const [state, setState] = useState('');
@@ -20,9 +32,13 @@ export default function SpatialAnalytics() {
   const [villages, setVillages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedVillage, setSelectedVillage] = useState(null);
+
+  const [baseMap, setBaseMap] = useState('dark');
+  const [mapStyle, setMapStyle] = useState('markers'); // 'markers' | 'heatmap'
   
   const leafletMapInstance = useRef(null);
   const markersGroupRef = useRef(null);
+  const activeTileLayerRef = useRef(null);
 
   // Load initial filter states and district aggregates
   useEffect(() => {
@@ -122,6 +138,17 @@ export default function SpatialAnalytics() {
     return districtsData.filter(d => d.state === state);
   }, [districtsData, state]);
 
+  // Handle tile switching
+  useEffect(() => {
+    if (leafletMapInstance.current && activeTileLayerRef.current) {
+      leafletMapInstance.current.removeLayer(activeTileLayerRef.current);
+      const tileLayer = window.L.tileLayer(getTileUrl(baseMap), {
+        attribution: getTileAttribution(baseMap)
+      }).addTo(leafletMapInstance.current);
+      activeTileLayerRef.current = tileLayer;
+    }
+  }, [baseMap]);
+
   // Initialize and update Leaflet Map
   useEffect(() => {
     if (window.L) {
@@ -136,10 +163,11 @@ export default function SpatialAnalytics() {
             preferCanvas: true,
           }).setView([20.5937, 78.9629], 5);
           
-          window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
+          const tileLayer = window.L.tileLayer(getTileUrl(baseMap), {
+            attribution: getTileAttribution(baseMap),
           }).addTo(map);
-
+          
+          activeTileLayerRef.current = tileLayer;
           leafletMapInstance.current = map;
         }
 
@@ -155,96 +183,180 @@ export default function SpatialAnalytics() {
 
         const activeCoords = [];
 
-        if (viewMode === 'districts') {
-          // Plot Aggregated Districts
-          filteredDistricts.forEach(d => {
-            if (!d.latitude || !d.longitude) return;
-            activeCoords.push([d.latitude, d.longitude]);
-
-            const score = d.overall_score || 50;
-            const color = score >= 70 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
-            const radius = Math.max(10, Math.min(30, Math.sqrt(d.total_population || 50000) / 45));
-
-            const marker = window.L.circleMarker([d.latitude, d.longitude], {
-              radius: radius,
-              fillColor: color,
-              color: '#ffffff',
-              weight: 1.5,
-              opacity: 0.9,
-              fillOpacity: 0.75
+        if (mapStyle === 'heatmap') {
+          // Plot Heatmap
+          const heatPoints = [];
+          if (viewMode === 'districts') {
+            filteredDistricts.forEach(d => {
+              if (d.latitude && d.longitude) {
+                const weight = Math.max(0.1, (100 - (d.overall_score || 50)) / 100);
+                heatPoints.push([d.latitude, d.longitude, weight]);
+              }
             });
+          } else {
+            const dataToUse = activeIndicator === 'none' ? villages : hotspots;
+            dataToUse.forEach(v => {
+              if (v.latitude && v.longitude) {
+                const weight = activeIndicator === 'none'
+                  ? Math.max(0.1, (100 - (v.overall_score || 50)) / 100)
+                  : 1.0;
+                heatPoints.push([v.latitude, v.longitude, weight]);
+              }
+            });
+          }
 
-            marker.bindPopup(`
-              <div style="font-family: sans-serif; color: #1e293b; min-width: 160px; padding: 4px;">
-                <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">${d.district} District</h4>
-                <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">State: ${d.state}</div>
-                <div style="font-size: 11px; margin-bottom: 4px; line-height: 1.4;">
-                  Avg score: <strong style="color: ${color}">${score.toFixed(1)}</strong><br/>
-                  Total Villages: <strong>${d.village_count}</strong><br/>
-                  Est. Population: <strong>${d.total_population?.toLocaleString()}</strong>
-                </div>
-                <button
-                  onclick="window.drillDownDistrict('${d.state}', '${d.district}');"
-                  style="display: inline-block; font-size: 10px; color: #6366f1; border: 1px solid rgba(99,102,241,0.4); padding: 4px 8px; border-radius: 4px; background: rgba(99,102,241,0.06); cursor: pointer; font-weight: 500; width: 100%; text-align: center; margin-top: 6px;"
-                >
-                  Drill Down into Villages &rarr;
-                </button>
-              </div>
-            `);
-
-            markersGroup.addLayer(marker);
-          });
+          if (window.L.heatLayer) {
+            const heatLayer = window.L.heatLayer(heatPoints, {
+              radius: 30,
+              blur: 18,
+              maxZoom: 14,
+              minOpacity: 0.4
+            });
+            markersGroup.addLayer(heatLayer);
+            
+            // Add transparent markers for hover popups
+            if (viewMode === 'districts') {
+              filteredDistricts.forEach(d => {
+                if (!d.latitude || !d.longitude) return;
+                const marker = window.L.circleMarker([d.latitude, d.longitude], {
+                  radius: 12,
+                  stroke: false,
+                  fillColor: '#ffffff',
+                  fillOpacity: 0.001
+                });
+                marker.bindPopup(`
+                  <div style="font-family: sans-serif; color: #1e293b; min-width: 160px; padding: 4px;">
+                    <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">${d.district} District</h4>
+                    <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">State: ${d.state}</div>
+                    <div style="font-size: 11px; margin-bottom: 4px; line-height: 1.4;">
+                      Avg score: <strong>${d.overall_score?.toFixed(1)}</strong><br/>
+                      Total Villages: <strong>${d.village_count}</strong>
+                    </div>
+                    <button
+                      onclick="window.drillDownDistrict('${d.state}', '${d.district}');"
+                      style="display: inline-block; font-size: 10px; color: #6366f1; border: 1px solid rgba(99,102,241,0.4); padding: 4px 8px; border-radius: 4px; background: rgba(99,102,241,0.06); cursor: pointer; font-weight: 500; width: 100%; text-align: center; margin-top: 6px;"
+                    >
+                      Drill Down into Villages &rarr;
+                    </button>
+                  </div>
+                `);
+                markersGroup.addLayer(marker);
+              });
+            } else {
+              const dataToUse = activeIndicator === 'none' ? villages : hotspots;
+              dataToUse.forEach(v => {
+                if (!v.latitude || !v.longitude) return;
+                const marker = window.L.circleMarker([v.latitude, v.longitude], {
+                  radius: 8,
+                  stroke: false,
+                  fillColor: '#ffffff',
+                  fillOpacity: 0.001
+                });
+                marker.bindPopup(`
+                  <div style="font-family: sans-serif; color: #1e293b; min-width: 140px;">
+                    <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">${v.village_name}</h4>
+                    <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${v.district}, ${v.state}</div>
+                    <div style="font-size: 11px; margin-bottom: 4px;">
+                      Score: <strong>${v.overall_score?.toFixed(1)}</strong> | Rank: <strong>#${v.overall_rank || '—'}</strong>
+                    </div>
+                  </div>
+                `);
+                markersGroup.addLayer(marker);
+              });
+            }
+          }
         } else {
-          // Plot Individual Villages
-          villages.forEach(v => {
-            if (!v.latitude || !v.longitude) return;
-            activeCoords.push([v.latitude, v.longitude]);
+          if (viewMode === 'districts') {
+            // Plot Aggregated Districts
+            filteredDistricts.forEach(d => {
+              if (!d.latitude || !d.longitude) return;
+              activeCoords.push([d.latitude, d.longitude]);
 
-            const isDeficient = getDeficiencyStatus(v);
-            const score = v.overall_score || 50;
+              const score = d.overall_score || 50;
+              const color = score >= 70 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
+              const radius = Math.max(10, Math.min(30, Math.sqrt(d.total_population || 50000) / 45));
 
-            let markerColor = '#10b981';
-            if (isDeficient || score < 50) {
-              markerColor = '#ef4444';
-            } else if (score < 70) {
-              markerColor = '#f59e0b';
-            }
+              const marker = window.L.circleMarker([d.latitude, d.longitude], {
+                radius: radius,
+                fillColor: color,
+                color: '#ffffff',
+                weight: 1.5,
+                opacity: 0.9,
+                fillOpacity: 0.75
+              });
 
-            const marker = window.L.circleMarker([v.latitude, v.longitude], {
-              radius: isDeficient ? 10 : 7,
-              fillColor: markerColor,
-              color: isDeficient ? '#000000' : '#ffffff',
-              weight: isDeficient ? 2 : 1,
-              opacity: 1,
-              fillOpacity: 0.85
+              marker.bindPopup(`
+                <div style="font-family: sans-serif; color: #1e293b; min-width: 160px; padding: 4px;">
+                  <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">${d.district} District</h4>
+                  <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">State: ${d.state}</div>
+                  <div style="font-size: 11px; margin-bottom: 4px; line-height: 1.4;">
+                    Avg score: <strong style="color: ${color}">${score.toFixed(1)}</strong><br/>
+                    Total Villages: <strong>${d.village_count}</strong><br/>
+                    Est. Population: <strong>${d.total_population?.toLocaleString()}</strong>
+                  </div>
+                  <button
+                    onclick="window.drillDownDistrict('${d.state}', '${d.district}');"
+                    style="display: inline-block; font-size: 10px; color: #6366f1; border: 1px solid rgba(99,102,241,0.4); padding: 4px 8px; border-radius: 4px; background: rgba(99,102,241,0.06); cursor: pointer; font-weight: 500; width: 100%; text-align: center; margin-top: 6px;"
+                  >
+                    Drill Down into Villages &rarr;
+                  </button>
+                </div>
+              `);
+
+              markersGroup.addLayer(marker);
             });
+          } else {
+            // Plot Individual Villages
+            villages.forEach(v => {
+              if (!v.latitude || !v.longitude) return;
+              activeCoords.push([v.latitude, v.longitude]);
 
-            marker.bindPopup(`
-              <div style="font-family: sans-serif; color: #1e293b; min-width: 140px;">
-                <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">${v.village_name}</h4>
-                <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${v.district}, ${v.state}</div>
-                <div style="font-size: 11px; margin-bottom: 4px;">
-                  Score: <strong>${score.toFixed(1)}</strong> | Rank: <strong>#${v.overall_rank || '—'}</strong>
+              const isDeficient = getDeficiencyStatus(v);
+              const score = v.overall_score || 50;
+
+              let markerColor = '#10b981';
+              if (isDeficient || score < 50) {
+                markerColor = '#ef4444';
+              } else if (score < 70) {
+                markerColor = '#f59e0b';
+              }
+
+              const marker = window.L.circleMarker([v.latitude, v.longitude], {
+                radius: isDeficient ? 10 : 7,
+                fillColor: markerColor,
+                color: isDeficient ? '#000000' : '#ffffff',
+                weight: isDeficient ? 2 : 1,
+                opacity: 1,
+                fillOpacity: 0.85
+              });
+
+              marker.bindPopup(`
+                <div style="font-family: sans-serif; color: #1e293b; min-width: 140px;">
+                  <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">${v.village_name}</h4>
+                  <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${v.district}, ${v.state}</div>
+                  <div style="font-size: 11px; margin-bottom: 4px;">
+                    Score: <strong>${score.toFixed(1)}</strong> | Rank: <strong>#${v.overall_rank || '—'}</strong>
+                  </div>
+                  <div style="font-size: 10px; text-transform: uppercase; font-weight: bold; color: ${isDeficient ? '#ef4444' : '#64748b'}">
+                    ${isDeficient ? '⚠️ CRITICAL DEFICIT' : `Priority: ${v.priority_level}`}
+                  </div>
                 </div>
-                <div style="font-size: 10px; text-transform: uppercase; font-weight: bold; color: ${isDeficient ? '#ef4444' : '#64748b'}">
-                  ${isDeficient ? '⚠️ CRITICAL DEFICIT' : `Priority: ${v.priority_level}`}
-                </div>
-              </div>
-            `);
+              `);
 
-            markersGroup.addLayer(marker);
+              markersGroup.addLayer(marker);
 
-            if (isDeficient) {
-              window.L.circle([v.latitude, v.longitude], {
-                radius: 400,
-                color: '#ef4444',
-                fillColor: '#ef4444',
-                fillOpacity: 0.15,
-                weight: 1,
-                dashArray: '3, 5'
-              }).addTo(markersGroup);
-            }
-          });
+              if (isDeficient) {
+                window.L.circle([v.latitude, v.longitude], {
+                  radius: 400,
+                  color: '#ef4444',
+                  fillColor: '#ef4444',
+                  fillOpacity: 0.15,
+                  weight: 1,
+                  dashArray: '3, 5'
+                }).addTo(markersGroup);
+              }
+            });
+          }
         }
 
         map.addLayer(markersGroup);
@@ -256,7 +368,7 @@ export default function SpatialAnalytics() {
 
       return () => clearTimeout(timer);
     }
-  }, [viewMode, villages, filteredDistricts, getDeficiencyStatus]);
+  }, [viewMode, villages, filteredDistricts, getDeficiencyStatus, baseMap, mapStyle, activeIndicator]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -444,20 +556,110 @@ export default function SpatialAnalytics() {
 
           <div id="analytics-map" style={{ flex: 1, borderRadius: '6px', zIndex: 1 }} />
 
+          {/* Floating Base Map and Visualization switcher */}
+          <div style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            zIndex: 10,
+            background: 'rgba(15, 22, 41, 0.95)',
+            border: '1px solid var(--border)',
+            padding: '12px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+            minWidth: '180px'
+          }}>
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                Base Map Style
+              </div>
+              <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', padding: '2px', borderRadius: '6px' }}>
+                {['dark', 'light', 'satellite'].map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setBaseMap(mode)}
+                    style={{
+                      flex: 1,
+                      background: baseMap === mode ? 'var(--accent)' : 'transparent',
+                      border: 'none',
+                      color: '#fff',
+                      padding: '4px 6px',
+                      fontSize: '10px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontWeight: baseMap === mode ? 'bold' : 'normal',
+                      textTransform: 'capitalize',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                Visualization Layer
+              </div>
+              <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', padding: '2px', borderRadius: '6px' }}>
+                {[
+                  { key: 'markers', label: '📍 Markers' },
+                  { key: 'heatmap', label: '🔥 Heatmap' }
+                ].map(opt => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setMapStyle(opt.key)}
+                    style={{
+                      flex: 1,
+                      background: mapStyle === opt.key ? 'var(--accent)' : 'transparent',
+                      border: 'none',
+                      color: '#fff',
+                      padding: '4px 6px',
+                      fontSize: '10px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontWeight: mapStyle === opt.key ? 'bold' : 'normal',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Map Legend panel Overlay */}
           <div style={{ padding: '8px 12px', background: 'rgba(15,22,41,0.9)', border: '1px solid var(--border)', borderRadius: '6px', display: 'flex', gap: '16px', fontSize: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ef4444' }} />
-              Deficient / Hotspot / Critical (&lt; 50)
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} />
-              Developing (Overall Score 50-69)
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
-              Sufficient (Overall Score &ge; 70)
-            </span>
+            {mapStyle === 'heatmap' ? (
+              <>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ display: 'inline-block', width: 12, height: 6, background: 'linear-gradient(90deg, blue, cyan, lime, yellow, red)', borderRadius: '2px' }} />
+                  Density Index (Blue: Low &rarr; Red: High Deficit Density)
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ef4444' }} />
+                  Deficient / Hotspot / Critical (&lt; 50)
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} />
+                  Developing (Overall Score 50-69)
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+                  Sufficient (Overall Score &ge; 70)
+                </span>
+              </>
+            )}
           </div>
         </div>
 
