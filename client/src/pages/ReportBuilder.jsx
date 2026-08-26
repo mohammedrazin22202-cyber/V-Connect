@@ -33,11 +33,13 @@ export default function ReportBuilder() {
 
   // History and AI recommendations states
   const [history, setHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [aiRecommendations, setAiRecommendations] = useState('');
   const [loadingAi, setLoadingAi] = useState(false);
   const [aiError, setAiError] = useState(null);
 
   // Configuration switches
+  const [incCoverPage, setIncCoverPage] = useState(true);
   const [incDemographics, setIncDemographics] = useState(true);
   const [incScoresRadar, setIncScoresRadar] = useState(true);
   const [incGapsList, setIncGapsList] = useState(true);
@@ -103,6 +105,64 @@ export default function ReportBuilder() {
       setAiError("Network error generating recommendations.");
     }
     setLoadingAi(false);
+  };
+
+  const handleExportCSV = () => {
+    if (!villageData || !villageData.village) return;
+    const v = villageData.village;
+    
+    let csvRows = [];
+    
+    csvRows.push(`"V-CONNECT REGIONAL VILLAGE BRIEF REPORT"`);
+    csvRows.push(`"Generated On", "${new Date().toLocaleDateString()}"`);
+    csvRows.push("");
+    
+    csvRows.push(`"General Profile Information"`);
+    csvRows.push(`"Village ID", "${v.village_id}"`);
+    csvRows.push(`"Village Name", "${v.village_name || ''}"`);
+    csvRows.push(`"District", "${v.district || ''}"`);
+    csvRows.push(`"State", "${v.state || ''}"`);
+    csvRows.push(`"Gram Panchayat", "${v.gram_panchayat || ''}"`);
+    csvRows.push(`"Block/Mandal", "${v.block || ''}"`);
+    csvRows.push(`"Zone/Region", "${v.region_zone || ''}"`);
+    csvRows.push(`"Total Population", "${v.total_population || ''}"`);
+    csvRows.push(`"Households Count", "${v.households || ''}"`);
+    csvRows.push(`"Priority Level", "${v.priority_level || ''}"`);
+    csvRows.push(`"National Priority Rank", "${v.national_priority_rank || ''}"`);
+    csvRows.push(`"Recommended Budget (INR)", "${v.recommended_budget_inr || ''}"`);
+    csvRows.push("");
+    
+    csvRows.push(`"Domain Development Scores"`);
+    csvRows.push(`"Economy Score", "${v.economy_score?.toFixed(2) || '0.00'}"`);
+    csvRows.push(`"Education Score", "${v.education_score?.toFixed(2) || '0.00'}"`);
+    csvRows.push(`"Health Score", "${v.health_score?.toFixed(2) || '0.00'}"`);
+    csvRows.push(`"Infrastructure Score", "${v.infrastructure_score?.toFixed(2) || '0.00'}"`);
+    csvRows.push(`"Environment Score", "${v.environment_score?.toFixed(2) || '0.00'}"`);
+    csvRows.push(`"Governance Score", "${v.governance_score?.toFixed(2) || '0.00'}"`);
+    csvRows.push(`"Social Score", "${v.social_score?.toFixed(2) || '0.00'}"`);
+    csvRows.push(`"Overall Score", "${v.overall_score?.toFixed(2) || '0.00'}"`);
+    csvRows.push(`"Overall National Rank", "${v.overall_rank || ''}"`);
+    csvRows.push("");
+    
+    if (villageData.metrics) {
+      csvRows.push(`"Detailed Development Metrics Log"`);
+      csvRows.push(`"Domain Sector", "Metric Parameter", "Reported Value"`);
+      Object.entries(villageData.metrics).forEach(([category, items]) => {
+        items.forEach(m => {
+          csvRows.push(`"${category}", "${m.key}", "${m.value}"`);
+        });
+      });
+    }
+    
+    const csvString = csvRows.join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${v.village_name.replace(/\s+/g, '_')}_development_report.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const radarData = useMemo(() => {
@@ -193,6 +253,14 @@ export default function ReportBuilder() {
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button 
+            className="btn btn--secondary" 
+            onClick={handleExportCSV}
+            disabled={!villageData}
+            id="builder-export-csv-btn"
+          >
+            📥 Export CSV Data
+          </button>
+          <button 
             className="btn btn--primary" 
             onClick={() => window.print()}
             disabled={!villageData}
@@ -250,6 +318,10 @@ export default function ReportBuilder() {
         <div className="glass-panel" style={{ padding: '18px' }}>
           <h3 className="panel-title" style={{ fontSize: '13px', marginBottom: '12px' }}>2. Customize Report Sections</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={incCoverPage} onChange={e => setIncCoverPage(e.target.checked)} id="toggle-cover" />
+              Include Branded Cover Page
+            </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input type="checkbox" checked={incDemographics} onChange={e => setIncDemographics(e.target.checked)} id="toggle-demo" />
               Demographic Profile Table
@@ -315,6 +387,52 @@ export default function ReportBuilder() {
             fontFamily: 'system-ui, sans-serif'
           }}
         >
+          {/* Cover Page */}
+          {incCoverPage && (
+            <div className="report-cover-page" style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              height: '1020px',
+              padding: '80px 40px',
+              border: '4px double #1e3a8a',
+              marginBottom: '40px',
+              pageBreakAfter: 'always',
+              boxSizing: 'border-box'
+            }}>
+              <div style={{ textAlign: 'center', marginTop: '140px' }}>
+                <div style={{ fontSize: '14px', letterSpacing: '2px', fontWeight: 'bold', color: '#1e3a8a', textTransform: 'uppercase' }}>
+                  Ministry of Rural Development & Panchayat Raj
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                  Government of India
+                </div>
+                
+                <div style={{ margin: '100px 0', borderTop: '2px solid #e2e8f0', borderBottom: '2px solid #e2e8f0', padding: '40px 0' }}>
+                  <h1 style={{ fontSize: '32px', color: '#0f172a', fontWeight: '800', letterSpacing: '0.5px', lineHeight: '1.2' }}>
+                    VCONNECT DEVELOPMENT BRIEF
+                  </h1>
+                  <h2 style={{ fontSize: '24px', color: '#1e3a8a', fontWeight: '600', marginTop: '14px' }}>
+                    {villageData.village.village_name}
+                  </h2>
+                  <p style={{ fontSize: '14px', color: '#475569', marginTop: '6px' }}>
+                    District: {villageData.village.district} | State: {villageData.village.state}
+                  </p>
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                <div>
+                  <strong>Report ID:</strong> VCON-{villageData.village.village_id}-{new Date().getFullYear()}<br />
+                  <strong>Classification:</strong> Official / Executive Board Reference
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <strong>Generated on:</strong> {new Date().toLocaleDateString()}<br />
+                  <strong>Database Core:</strong> VConnect AI Engine
+                </div>
+              </div>
+            </div>
+          )}
           {/* Header Brief */}
           <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '3px solid #1e3a8a', paddingBottom: '16px', marginBottom: '24px' }}>
             <div>
