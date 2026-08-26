@@ -6,7 +6,8 @@ const STRATEGIES = [
   { key: 'balanced', label: '⚖️ Balanced Development', desc: 'Distributes resources across all sectors based on deficit priority.' },
   { key: 'education', label: '🎓 Education & Skill-building First', desc: 'Focuses funding on digital literacy, dropout rates, and schools (70% lower intervention costs).' },
   { key: 'health', label: '🏥 Medical & Nutrition Push', desc: 'Focuses funding on malnutrition reduction, access time, and vaccinations.' },
-  { key: 'infrastructure', label: '🔌 Basic Infra & Digital Connectivity', desc: 'Prioritizes clean drinking water, sanitation facilities, internet, and electricity.' }
+  { key: 'infrastructure', label: '🔌 Basic Infra & Digital Connectivity', desc: 'Prioritizes clean drinking water, sanitation facilities, internet, and electricity.' },
+  { key: 'custom', label: '⚙️ Custom Sliders', desc: 'Manually adjust individual domain priority weights (0 to 5) to test unique policy balances.' }
 ];
 
 const DOMAIN_COLORS = {
@@ -35,6 +36,27 @@ export default function PolicySandbox() {
   const [strategyB, setStrategyB] = useState('education');
   const [simulationB, setSimulationB] = useState(null);
 
+  // Custom weights states
+  const [customWeights, setCustomWeights] = useState({
+    economy: 1.0,
+    education: 1.0,
+    health: 1.0,
+    infrastructure: 1.0,
+    environment: 1.0,
+    governance: 1.0,
+    social: 1.0
+  });
+
+  const [customWeightsB, setCustomWeightsB] = useState({
+    economy: 1.0,
+    education: 1.0,
+    health: 1.0,
+    infrastructure: 1.0,
+    environment: 1.0,
+    governance: 1.0,
+    social: 1.0
+  });
+
   // Load filter options
   useEffect(() => {
     fetchFilters().then(setFilters).catch(console.error);
@@ -53,6 +75,24 @@ export default function PolicySandbox() {
     }
   }, [state]);
 
+  const getSimulationParams = (strat, isB = false) => {
+    const params = {
+      state,
+      district,
+      budget: parseFloat(budget) || 5000000,
+      strategy: strat
+    };
+
+    if (strat === 'custom') {
+      const weights = isB ? customWeightsB : customWeights;
+      Object.entries(weights).forEach(([domain, val]) => {
+        params[`${domain}_weight`] = val;
+      });
+    }
+
+    return params;
+  };
+
   const handleSimulate = async (e) => {
     if (e) e.preventDefault();
     if (!state || !district) {
@@ -64,18 +104,8 @@ export default function PolicySandbox() {
     try {
       if (compareMode) {
         const [resA, resB] = await Promise.all([
-          fetchRegionalSimulation({
-            state,
-            district,
-            budget: parseFloat(budget) || 5000000,
-            strategy
-          }),
-          fetchRegionalSimulation({
-            state,
-            district,
-            budget: parseFloat(budget) || 5000000,
-            strategy: strategyB
-          })
+          fetchRegionalSimulation(getSimulationParams(strategy, false)),
+          fetchRegionalSimulation(getSimulationParams(strategyB, true))
         ]);
         
         if (resA.success && resB.success) {
@@ -85,12 +115,7 @@ export default function PolicySandbox() {
           setError((!resA.success ? resA.error : resB.error) || "Simulation run failed.");
         }
       } else {
-        const data = await fetchRegionalSimulation({
-          state,
-          district,
-          budget: parseFloat(budget) || 5000000,
-          strategy
-        });
+        const data = await fetchRegionalSimulation(getSimulationParams(strategy, false));
         if (data.success) {
           setSimulation(data);
           setSimulationB(null);
@@ -238,6 +263,35 @@ export default function PolicySandbox() {
                 </div>
               </div>
 
+              {strategy === 'custom' && (
+                <div className="glass-panel animate-in" style={{ padding: '20px', border: '1px solid var(--accent)', background: 'rgba(99,102,241,0.02)' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#fff', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>⚙️</span> Strategy A Custom Domain Priority Weights
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px 24px' }}>
+                    {Object.keys(customWeights).map(dom => (
+                      <div key={dom} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                          <span style={{ textTransform: 'capitalize', fontWeight: '600', color: DOMAIN_COLORS[dom] || 'var(--text-secondary)' }}>
+                            {dom} priority
+                          </span>
+                          <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{customWeights[dom]}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="5"
+                          step="0.5"
+                          value={customWeights[dom]}
+                          onChange={e => setCustomWeights(prev => ({ ...prev, [dom]: parseFloat(e.target.value) }))}
+                          style={{ accentColor: 'var(--accent)', cursor: 'pointer', height: '6px', borderRadius: '3px' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {compareMode && (
                 <div>
                   <label style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '800', display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -261,6 +315,35 @@ export default function PolicySandbox() {
                       >
                         <strong style={{ fontSize: '12.5px', display: 'block', color: strategyB === s.key ? '#fff' : 'var(--text-primary)' }}>{s.label}</strong>
                         <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', display: 'block', marginTop: '4px', lineHeight: '1.3' }}>{s.desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {compareMode && strategyB === 'custom' && (
+                <div className="glass-panel animate-in" style={{ padding: '20px', border: '1px solid #06b6d4', background: 'rgba(6,182,212,0.02)' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#fff', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>⚙️</span> Strategy B Custom Domain Priority Weights
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px 24px' }}>
+                    {Object.keys(customWeightsB).map(dom => (
+                      <div key={dom} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                          <span style={{ textTransform: 'capitalize', fontWeight: '600', color: DOMAIN_COLORS[dom] || 'var(--text-secondary)' }}>
+                            {dom} priority
+                          </span>
+                          <span style={{ color: '#06b6d4', fontWeight: 'bold' }}>{customWeightsB[dom]}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="5"
+                          step="0.5"
+                          value={customWeightsB[dom]}
+                          onChange={e => setCustomWeightsB(prev => ({ ...prev, [dom]: parseFloat(e.target.value) }))}
+                          style={{ accentColor: '#06b6d4', cursor: 'pointer', height: '6px', borderRadius: '3px' }}
+                        />
                       </div>
                     ))}
                   </div>
