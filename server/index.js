@@ -1080,14 +1080,35 @@ app.get("/api/simulation/region", (req, res) => {
       "internet_penetration%": { costFactor: 5000, isPositive: true, domain: "infrastructure" }
     };
 
-    // Modify cost factors according to strategy
+    // Load custom weight mappings
+    const weightsMap = {
+      economy: parseFloat(req.query.economy_weight !== undefined ? req.query.economy_weight : 1.0),
+      education: parseFloat(req.query.education_weight !== undefined ? req.query.education_weight : 1.0),
+      health: parseFloat(req.query.health_weight !== undefined ? req.query.health_weight : 1.0),
+      infrastructure: parseFloat(req.query.infrastructure_weight !== undefined ? req.query.infrastructure_weight : 1.0),
+      environment: parseFloat(req.query.environment_weight !== undefined ? req.query.environment_weight : 1.0),
+      governance: parseFloat(req.query.governance_weight !== undefined ? req.query.governance_weight : 1.0),
+      social: parseFloat(req.query.social_weight !== undefined ? req.query.social_weight : 1.0)
+    };
+
+    // Modify cost factors according to strategy or custom weights
     const currentFactors = {};
     for (const [key, val] of Object.entries(OPTIMIZER_FACTORS)) {
       currentFactors[key] = { ...val };
-      if (strategy === val.domain) {
-        currentFactors[key].costFactor *= 0.3; // Strategy domains are 70% cheaper to improve (representing targeted policy efficiency)
-      } else if (strategy !== "balanced") {
-        currentFactors[key].costFactor *= 1.5; // Other domains are more expensive in focused strategies
+      if (strategy === "custom") {
+        const weight = weightsMap[val.domain];
+        if (weight <= 0) {
+          currentFactors[key].costFactor = 1e9; // make it prohibitively expensive to simulate disable
+        } else {
+          // Cheaper to improve if weight is high
+          currentFactors[key].costFactor *= (1.0 / weight);
+        }
+      } else {
+        if (strategy === val.domain) {
+          currentFactors[key].costFactor *= 0.3; // Strategy domains are 70% cheaper to improve (representing targeted policy efficiency)
+        } else if (strategy !== "balanced") {
+          currentFactors[key].costFactor *= 1.5; // Other domains are more expensive in focused strategies
+        }
       }
     }
 
