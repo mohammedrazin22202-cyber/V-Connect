@@ -29,6 +29,10 @@ V-Connect/
 - **State-by-State Analytics**: Side-by-side comparison of development scores and metrics.
 - **Detailed Village Profiles**: View details for any village including latitude, longitude, and nearby facilities (schools, hospitals, bus stops, railway stations).
 - **Data Ingestion Tooling**: Automated scraping using Google Maps coordinates and straight-line distances.
+- **Advanced Spatial Analytics Maps**: Added switchable base layer maps (OSM, sleek Dark mode, Esri Satellite) and density heatmaps of regional deficits (dropout, sanitation, health access).
+- **Interactive Custom Weight Scenario Planner**: Toggle custom domain weight configurations (0x to 5x sliders) inside the Policy Sandbox simulator to analyze tailored resource allocations.
+- **Executive PDF & CSV Export Center**: Direct CSV download of full village metrics and professionally styled, Ministry-branded executive print layouts with custom cover pages and page breaks.
+- **Interactive Data Import Dashboard**: Drag-and-drop CSV uploader with fuzzy column mapping suggestions and a client-side parsed data preview grid before SQLite commit.
 
 ## Getting Started
 
