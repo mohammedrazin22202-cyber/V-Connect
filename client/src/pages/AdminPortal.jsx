@@ -21,6 +21,12 @@ export default function AdminPortal() {
   const [validating, setValidating] = useState(false);
   const [ingesting, setIngesting] = useState(false);
 
+  // Data Import states
+  const [parsedData, setParsedData] = useState([]);
+  const [csvHeaders, setCsvHeaders] = useState([]);
+  const [columnMappings, setColumnMappings] = useState({});
+  const [dragOver, setDragOver] = useState(false);
+
   // Subprocess Pipeline states
   const [selectedPipeline, setSelectedPipeline] = useState('ingest'); // 'scraper' | 'ingest'
   const [runningPipeline, setRunningPipeline] = useState(false);
@@ -107,78 +113,118 @@ export default function AdminPortal() {
     setOverrideLoading(false);
   };
 
+  const VALID_METRICS = [
+    "employment_rate", "avg_household_income", "poverty_rate", "crop_yield_index%",
+    "farmer_income_avg", "farmer_debt_index", "market_access_score", "bank_access_score",
+    "literacy_rate", "female_literacy_rate", "dropout_rate", "school_count",
+    "teacher_student_ratio", "digital_literacy_rate", "infant_mortality_rate",
+    "malnutrition_rate", "vaccination_coverage%", "medical_staff_per_1000",
+    "avg_healthcare_access_time_min", "healthcare_effectiveness_score",
+    "drinking_water_coverage_pct", "sanitation_coverage_pct", "road_quality_index",
+    "electricity_hours_per_day", "internet_penetration%", "nearest_hospital_distance_km",
+    "flood_risk_score", "earthquake_risk_score", "air_quality_index", "forest_cover_pct",
+    "disaster_preparedness_score", "climate_vulnerability_index", "panchayat_efficiency_score",
+    "transparency_index", "fund_utilization_pct", "scheme_coverage_pct",
+    "corruption_risk_proxy", "total_crime_rate", "crimes_against_women_rate",
+    "social_cohesion_index", "community_participation_score", "youth_engagement_score",
+    "recommended_budget_inr", "priority_level"
+  ];
+
+  const performFuzzyMapping = (headers) => {
+    const mapping = {};
+    const dbOptions = ['village_id', ...VALID_METRICS];
+    
+    headers.forEach(h => {
+      const cleanHeader = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      // Direct Match
+      let bestMatch = dbOptions.find(opt => opt.replace(/[^a-z0-9]/g, '') === cleanHeader);
+      
+      if (!bestMatch) {
+        // Substring / fuzzy mapping
+        bestMatch = dbOptions.find(opt => {
+          const cleanOpt = opt.replace(/[^a-z0-9]/g, '');
+          return cleanOpt.includes(cleanHeader) || cleanHeader.includes(cleanOpt);
+        });
+      }
+      
+      mapping[h] = bestMatch || 'skip';
+    });
+    return mapping;
+  };
+
+  const parseCSVContent = (text) => {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) {
+      setValidationLogs(["❌ Error: CSV must contain a header and at least one data row."]);
+      return;
+    }
+    
+    const headers = lines[0].split(',').map(h => h.trim());
+    const data = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',').map(c => c.trim());
+      if (cols.length === headers.length) {
+        const rowObj = {};
+        headers.forEach((h, idx) => {
+          rowObj[h] = cols[idx];
+        });
+        data.push(rowObj);
+      }
+    }
+    
+    setCsvHeaders(headers);
+    setParsedData(data);
+    const mappings = performFuzzyMapping(headers);
+    setColumnMappings(mappings);
+    setValidationLogs([`📂 Loaded CSV: ${data.length} records, ${headers.length} columns detected. Review column mappings below.`]);
+  };
+
+  const constructMappedCSV = () => {
+    if (parsedData.length === 0) return '';
+    
+    const villageIdCsvHeader = Object.entries(columnMappings).find(([_, dbCol]) => dbCol === 'village_id')?.[0];
+    if (!villageIdCsvHeader) return '';
+    
+    const mappedEntries = Object.entries(columnMappings).filter(([_, dbCol]) => dbCol !== 'skip' && dbCol !== 'village_id');
+    const newHeaders = ['village_id', ...mappedEntries.map(([_, dbCol]) => dbCol)];
+    
+    const rows = [newHeaders.join(',')];
+    parsedData.forEach(rowObj => {
+      const rowData = [rowObj[villageIdCsvHeader]];
+      mappedEntries.forEach(([csvH]) => {
+        rowData.push(rowObj[csvH]);
+      });
+      rows.push(rowData.join(','));
+    });
+    
+    return rows.join('\n');
+  };
+
   const handleValidateCSV = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setValidating(true);
     setValidationLogs([]);
     
     setTimeout(() => {
       const logs = [];
       logs.push("⏳ Initializing VCONNECT schema validator...");
-      logs.push("📂 Reading raw CSV stream records...");
       
-      const csvContent = pastedCSV;
-      if (!csvContent.trim()) {
-        logs.push("❌ Error: No CSV content detected. Please paste text or select file.");
+      const mappedCSV = constructMappedCSV();
+      if (!mappedCSV) {
+        logs.push("❌ Validation Failed: One column must be mapped to 'village_id'");
         setValidationLogs(logs);
         setValidating(false);
         return;
       }
-
-      const lines = csvContent.split('\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length < 2) {
-        logs.push("❌ Error: CSV must contain a header and at least one data row.");
-        setValidationLogs(logs);
-        setValidating(false);
-        return;
-      }
-
-      const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-      logs.push(`🔍 Parsed header layout: [${headers.join(', ')}]`);
       
-      if (headers[0] !== 'village_id') {
-        logs.push("❌ Validation Failed: First column must be 'village_id'");
-        setValidationLogs(logs);
-        setValidating(false);
-        return;
-      }
-
-      const VALID_METRICS = [
-        "employment_rate", "avg_household_income", "poverty_rate", "crop_yield_index%",
-        "farmer_income_avg", "farmer_debt_index", "market_access_score", "bank_access_score",
-        "literacy_rate", "female_literacy_rate", "dropout_rate", "school_count",
-        "teacher_student_ratio", "digital_literacy_rate", "infant_mortality_rate",
-        "malnutrition_rate", "vaccination_coverage%", "medical_staff_per_1000",
-        "avg_healthcare_access_time_min", "healthcare_effectiveness_score",
-        "drinking_water_coverage_pct", "sanitation_coverage_pct", "road_quality_index",
-        "electricity_hours_per_day", "internet_penetration%", "nearest_hospital_distance_km",
-        "flood_risk_score", "earthquake_risk_score", "air_quality_index", "forest_cover_pct",
-        "disaster_preparedness_score", "climate_vulnerability_index", "panchayat_efficiency_score",
-        "transparency_index", "fund_utilization_pct", "scheme_coverage_pct",
-        "corruption_risk_proxy", "total_crime_rate", "crimes_against_women_rate",
-        "social_cohesion_index", "community_participation_score", "youth_engagement_score",
-        "recommended_budget_inr", "priority_level"
-      ];
-
-      const invalidHeaders = headers.slice(1).filter(h => !VALID_METRICS.includes(h));
-      if (invalidHeaders.length > 0) {
-        logs.push(`❌ Validation Failed: Invalid metric columns found: [${invalidHeaders.join(', ')}]`);
-        setValidationLogs(logs);
-        setValidating(false);
-        return;
-      }
-
-      logs.push("✅ Standard schema mapping matching SUCCESS (100% matched keys)");
-      logs.push(`📊 Scanning ${lines.length - 1} records for datatype validation...`);
-
+      const lines = mappedCSV.split('\n').map(l => l.trim()).filter(Boolean);
+      const headers = lines[0].split(',');
+      logs.push(`🔍 Mapped Schema Layout: [${headers.join(', ')}]`);
+      
       let hasError = false;
       for (let i = 1; i < lines.length; i++) {
         const row = lines[i].split(',').map(v => v.trim());
-        if (row.length !== headers.length) {
-          logs.push(`❌ Row ${i + 1} has mismatched column count (expected ${headers.length}, got ${row.length})`);
-          hasError = true;
-          break;
-        }
         const villageId = parseInt(row[0], 10);
         if (isNaN(villageId)) {
           logs.push(`❌ Row ${i + 1} has invalid village_id: "${row[0]}"`);
@@ -210,13 +256,13 @@ export default function AdminPortal() {
       if (hasError) {
         logs.push("❌ Datatype verification: FAILED");
       } else {
-        logs.push("✅ Datatype verification: All records are valid and aligned.");
+        logs.push("✅ Datatype verification: All mapped columns validated successfully.");
         logs.push("🚀 Ingestion simulation sandbox ready. Ready to append to SQLite.");
       }
 
       setValidationLogs(logs);
       setValidating(false);
-    }, 800);
+    }, 600);
   };
 
   const handleIngestCSV = async () => {
@@ -227,12 +273,15 @@ export default function AdminPortal() {
     setValidationLogs([...logs]);
     
     try {
-      const res = await ingestCSVData(pastedCSV);
+      const mappedCSV = constructMappedCSV();
+      const res = await ingestCSVData(mappedCSV);
       if (res.success) {
         logs.push("✓ Transaction committed successfully.");
-        logs.push("⚡ Regenerating database indexes on overall_rank & domains...");
-        logs.push("🎉 Ingestion complete. Dashboard cache flushed.");
+        logs.push("🎉 Ingestion complete. Dashboard ranks and averages successfully updated!");
         setValidationLogs([...logs]);
+        setParsedData([]);
+        setCsvHeaders([]);
+        setColumnMappings({});
         loadStats();
       } else {
         logs.push(`❌ Ingestion failed: ${res.error || 'Unknown error'}`);
@@ -429,25 +478,52 @@ export default function AdminPortal() {
         </div>
 
         {/* CSV Ingestion Sandbox (Right) */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
-          <h3 className="panel-title" style={{ marginBottom: '6px' }}>📂 Ingestion Validator Sandbox</h3>
+        <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <h3 className="panel-title" style={{ marginBottom: '6px' }}>📂 Data Import & Validation Dashboard</h3>
           <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '18px' }}>
-            Upload or paste CSV values representing raw metrics to validate schema headers and data integrity prior to ingestion.
+            Upload a CSV containing village development metrics. Auto-map headers and preview values before appending.
           </p>
 
           <form onSubmit={handleValidateCSV} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '14px', minHeight: 0 }}>
-            <div style={{ flex: 1, minHeight: '120px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Paste CSV Content or Upload</label>
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  onClick={() => document.getElementById('admin-csv-file-input').click()}
-                  style={{ padding: '4px 10px', fontSize: '10px', height: '24px' }}
-                  id="admin-csv-upload-trigger"
-                >
-                  📂 Select file...
-                </button>
+            {parsedData.length === 0 ? (
+              // Drag and Drop Zone
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  const file = e.dataTransfer.files[0];
+                  if (file && file.name.endsWith('.csv')) {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => parseCSVContent(evt.target.result);
+                    reader.readAsText(file);
+                  }
+                }}
+                onClick={() => document.getElementById('admin-csv-file-input').click()}
+                style={{
+                  flex: 1,
+                  minHeight: '180px',
+                  border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--border)'}`,
+                  background: dragOver ? 'rgba(99,102,241,0.05)' : 'rgba(0,0,0,0.2)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: '20px',
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span style={{ fontSize: '32px', marginBottom: '8px' }}>📂</span>
+                <strong style={{ fontSize: '13px', display: 'block', color: '#fff' }}>
+                  Drag & Drop CSV File here
+                </strong>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  or click to select from your device
+                </span>
                 <input
                   type="file"
                   id="admin-csv-file-input"
@@ -456,52 +532,127 @@ export default function AdminPortal() {
                     const file = e.target.files[0];
                     if (file) {
                       const reader = new FileReader();
-                      reader.onload = (evt) => {
-                        setPastedCSV(evt.target.result);
-                        setValidationLogs([`📂 Loaded CSV file: "${file.name}" (${file.size} bytes). Click "Validate CSV Schema" to inspect.`]);
-                      };
+                      reader.onload = (evt) => parseCSVContent(evt.target.result);
                       reader.readAsText(file);
                     }
                   }}
                   style={{ display: 'none' }}
                 />
               </div>
-              <textarea
-                style={{
-                  flex: 1, width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)',
-                  color: '#fff', padding: '10px', borderRadius: '6px', fontFamily: 'monospace', fontSize: '11px', resize: 'none'
-                }}
-                placeholder="village_id,poverty_rate,dropout_rate,malnutrition_rate&#10;1,34.2,4.5,12.1&#10;2,20.0,8.2,15.6"
-                value={pastedCSV}
-                onChange={e => setPastedCSV(e.target.value)}
-                id="admin-csv-paste"
-              />
-            </div>
+            ) : (
+              // Mapping & Preview Dashboard View
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto', maxHeight: '420px', paddingRight: '4px' }} className="custom-scrollbar">
+                
+                {/* Column Mappings Section */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <h4 style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold' }}>
+                      1. Schema Mapping
+                    </h4>
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => {
+                        setParsedData([]);
+                        setCsvHeaders([]);
+                        setColumnMappings({});
+                        setValidationLogs([]);
+                      }}
+                      style={{ padding: '2px 8px', fontSize: '10px', height: '22px' }}
+                    >
+                      Clear File
+                    </button>
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', background: 'rgba(0,0,0,0.15)', padding: '10px', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                    {csvHeaders.map(h => (
+                      <div key={h} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '11px', color: '#fff', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={h}>
+                          {h}
+                        </span>
+                        <select
+                          className="filter-select"
+                          style={{ padding: '4px 6px', fontSize: '11px', width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: '#fff', height: '26px' }}
+                          value={columnMappings[h] || 'skip'}
+                          onChange={e => setColumnMappings(prev => ({ ...prev, [h]: e.target.value }))}
+                        >
+                          <option value="skip">⚠️ [Skip Column]</option>
+                          <option value="village_id">🔑 village_id (Primary Key)</option>
+                          {VALID_METRICS.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                type="submit"
-                className="btn btn--ghost"
-                style={{ flex: 1 }}
-                disabled={validating || ingesting}
-                id="admin-validate-btn"
-              >
-                {validating ? 'Analyzing Column Schema...' : '🔍 Validate CSV Schema'}
-              </button>
+                {/* Data Preview Table */}
+                <div>
+                  <h4 style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 'bold', marginBottom: '8px' }}>
+                    2. Data Preview (First 5 Rows)
+                  </h4>
+                  <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border)' }}>
+                          {csvHeaders.map(h => {
+                            const mapped = columnMappings[h];
+                            return (
+                              <th key={h} style={{ padding: '6px 8px', color: mapped === 'skip' ? 'var(--text-muted)' : mapped === 'village_id' ? '#10b981' : 'var(--accent)', borderRight: '1px solid rgba(255,255,255,0.02)' }}>
+                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80px' }}>{h}</div>
+                                <div style={{ fontSize: '8px', fontWeight: 'normal', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80px' }}>
+                                  {mapped === 'skip' ? 'skipped' : mapped}
+                                </div>
+                              </th>
+                            );
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsedData.slice(0, 5).map((row, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                            {csvHeaders.map(h => (
+                              <td key={h} style={{ padding: '6px 8px', color: columnMappings[h] === 'skip' ? 'var(--text-muted)' : 'var(--text-primary)', borderRight: '1px solid rgba(255,255,255,0.02)' }}>
+                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80px' }}>{row[h]}</div>
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
 
-              {validationLogs.some(log => log.includes("SUCCESS")) && (
+              </div>
+            )}
+
+            {parsedData.length > 0 && (
+              <div style={{ display: 'flex', gap: '10px' }}>
                 <button
-                  type="button"
-                  className="btn btn--primary"
+                  type="submit"
+                  className="btn btn--ghost"
                   style={{ flex: 1 }}
-                  onClick={handleIngestCSV}
-                  disabled={ingesting}
-                  id="admin-ingest-btn"
+                  disabled={validating || ingesting}
+                  id="admin-validate-btn"
                 >
-                  {ingesting ? 'Committing Database Transaction...' : '🚀 Append to DB'}
+                  {validating ? 'Validating schema...' : '🔍 Validate CSV Layout'}
                 </button>
-              )}
-            </div>
+
+                {validationLogs.some(log => log.includes("SUCCESS") || log.includes("successfully")) && (
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    style={{ flex: 1 }}
+                    onClick={handleIngestCSV}
+                    disabled={ingesting}
+                    id="admin-ingest-btn"
+                  >
+                    {ingesting ? 'Saving transaction...' : '🚀 Append to DB'}
+                  </button>
+                )}
+              </div>
+            )}
           </form>
 
           {/* Validation Logs console */}
