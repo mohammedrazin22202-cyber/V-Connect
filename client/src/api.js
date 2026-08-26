@@ -53,10 +53,11 @@ export async function fetchStateComparison(states = []) {
 
 export async function fetchRegionalSimulation(params = {}) {
   const query = new URLSearchParams();
-  if (params.state) query.set('state', params.state);
-  if (params.district) query.set('district', params.district);
-  if (params.budget) query.set('budget', params.budget);
-  if (params.strategy) query.set('strategy', params.strategy);
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null) {
+      query.set(key, val);
+    }
+  });
 
   const res = await fetch(`${API_BASE}/simulation/region?${query}`);
   return res.json();
