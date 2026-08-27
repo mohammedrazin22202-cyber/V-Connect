@@ -113,7 +113,7 @@ export default function AnomalyHub() {
         </div>
         <button 
           onClick={loadAnomalies} 
-          className="btn btn-secondary"
+          className="btn btn--ghost"
           style={{ cursor: 'pointer', height: 'fit-content' }}
         >
           🔄 Refresh Outliers
@@ -194,15 +194,15 @@ export default function AnomalyHub() {
                   <td className="text-right" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                     <button
                       onClick={() => navigate(`/village/${v.village_id}`)}
-                      className="btn btn-secondary"
+                      className="btn btn--ghost"
                       style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px', cursor: 'pointer' }}
                     >
                       View Profile
                     </button>
                     <button
                       onClick={() => navigate(`/edit-village/${v.village_id}`)}
-                      className="btn btn-primary"
-                      style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px', cursor: 'pointer', border: 'none', background: 'var(--primary)' }}
+                      className="btn btn--primary"
+                      style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px', cursor: 'pointer' }}
                     >
                       Edit Data
                     </button>
