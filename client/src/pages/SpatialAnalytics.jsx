@@ -12,7 +12,7 @@ const INDICATORS = [
 const getTileUrl = (mode) => {
   if (mode === 'light') return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
   if (mode === 'satellite') return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-  return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  return 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png';
 };
 
 const getTileAttribution = (mode) => {
