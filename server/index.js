@@ -49,6 +49,7 @@ try {
   
   // Initialize historical scores table & seed multi-year data if empty
   initializeHistoricalScores();
+  rebuildFiltersCache();
   
   console.log("✓ Connected to SQLite database (read-write, WAL enabled, indexes verified)");
 } catch (err) {
@@ -1428,27 +1429,35 @@ function rebuildDashboardStats() {
     bottomStates
   };
   
-  const states = db.prepare("SELECT DISTINCT state FROM villages WHERE state IS NOT NULL ORDER BY state").all().map(r => r.state);
-  const priorities = db.prepare("SELECT DISTINCT priority_level FROM villages WHERE priority_level IS NOT NULL ORDER BY priority_level").all().map(r => r.priority_level);
-  
-  const stateDistricts = {};
-  const distRows = db.prepare("SELECT DISTINCT state, district FROM villages WHERE state IS NOT NULL AND district IS NOT NULL ORDER BY state, district").all();
-  distRows.forEach(r => {
-    if (!stateDistricts[r.state]) {
-      stateDistricts[r.state] = [];
-    }
-    stateDistricts[r.state].push(r.district);
-  });
-  
-  const filtersData = {
-    states,
-    priorities,
-    state_districts: stateDistricts
-  };
-  
   db.prepare("INSERT OR REPLACE INTO dashboard_stats (stat_key, stat_value) VALUES ('summary', ?)").run(JSON.stringify(summaryStats));
   db.prepare("INSERT OR REPLACE INTO dashboard_stats (stat_key, stat_value) VALUES ('state_comparison', ?)").run(JSON.stringify(stateComparison));
-  db.prepare("INSERT OR REPLACE INTO dashboard_stats (stat_key, stat_value) VALUES ('filters', ?)").run(JSON.stringify(filtersData));
+}
+
+function rebuildFiltersCache() {
+  try {
+    const states = db.prepare("SELECT DISTINCT state FROM villages WHERE state IS NOT NULL ORDER BY state").all().map(r => r.state);
+    const priorities = db.prepare("SELECT DISTINCT priority_level FROM villages WHERE priority_level IS NOT NULL ORDER BY priority_level").all().map(r => r.priority_level);
+    
+    const stateDistricts = {};
+    const distRows = db.prepare("SELECT DISTINCT state, district FROM villages WHERE state IS NOT NULL AND district IS NOT NULL ORDER BY state, district").all();
+    distRows.forEach(r => {
+      if (!stateDistricts[r.state]) {
+        stateDistricts[r.state] = [];
+      }
+      stateDistricts[r.state].push(r.district);
+    });
+    
+    const filtersData = {
+      states,
+      priorities,
+      state_districts: stateDistricts
+    };
+    
+    db.prepare("INSERT OR REPLACE INTO dashboard_stats (stat_key, stat_value) VALUES ('filters', ?)").run(JSON.stringify(filtersData));
+    console.log("⚡ Filter options cache rebuilt successfully.");
+  } catch (err) {
+    console.error("Failed to rebuild filters cache:", err.message);
+  }
 }
 
 // ── POST /api/admin/update-budget ──────────────────────────────────────
@@ -1472,8 +1481,16 @@ app.post("/api/admin/update-budget", (req, res) => {
       return res.status(404).json({ error: "Village not found or no changes made" });
     }
 
-    rebuildDashboardStats(); // update cache
     invalidateApiCache();
+
+    // Rebuild stats in the background to avoid blocking the event loop
+    setImmediate(() => {
+      try {
+        rebuildDashboardStats();
+      } catch (err) {
+        console.error("Background stats rebuild error:", err.message);
+      }
+    });
 
     res.json({ success: true, message: `Village ${village_id} updated successfully.` });
   } catch (err) {
@@ -1636,18 +1653,20 @@ app.post("/api/admin/ingest-csv", (req, res) => {
         );
       });
 
-      // Recompute all ranks
+      // Recompute all ranks (optimized using UPDATE FROM)
       db.prepare(`
-        WITH Ranked AS (
+        UPDATE domain_scores
+        SET overall_rank = Ranked.new_rank
+        FROM (
           SELECT village_id, RANK() OVER (ORDER BY overall_score DESC) as new_rank
           FROM domain_scores
-        )
-        UPDATE domain_scores
-        SET overall_rank = (SELECT new_rank FROM Ranked WHERE Ranked.village_id = domain_scores.village_id)
+        ) AS Ranked
+        WHERE domain_scores.village_id = Ranked.village_id
       `).run();
 
       // Invalidate stats cache
       rebuildDashboardStats();
+      rebuildFiltersCache();
     });
 
     runTransaction(updates);
@@ -2213,17 +2232,23 @@ app.post("/api/villages/:id/update-metrics", (req, res) => {
       id
     );
 
+    // Update only the edited village's rank directly (O(1) index seek instead of O(N^2) full update)
     db.prepare(`
-      WITH Ranked AS (
-        SELECT village_id, RANK() OVER (ORDER BY overall_score DESC) as new_rank
-        FROM domain_scores
-      )
       UPDATE domain_scores
-      SET overall_rank = (SELECT new_rank FROM Ranked WHERE Ranked.village_id = domain_scores.village_id)
-    `).run();
+      SET overall_rank = (SELECT COUNT(*) + 1 FROM domain_scores WHERE overall_score > ?)
+      WHERE village_id = ?
+    `).run(overallScore, id);
 
-    rebuildDashboardStats();
     invalidateApiCache();
+
+    // Rebuild stats in the background to avoid blocking the event loop
+    setImmediate(() => {
+      try {
+        rebuildDashboardStats();
+      } catch (err) {
+        console.error("Background stats rebuild error:", err.message);
+      }
+    });
 
     res.json({
       success: true,
