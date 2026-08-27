@@ -266,7 +266,7 @@ export default function PredictiveSandbox() {
             <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
               <h3 className="panel-title" style={{ marginBottom: '6px' }}>Domain Score Correlation Heatmap</h3>
               <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.4' }}>
-                {"Statistical relationships between the 7 core pillars calculated via the Pearson correlation coefficient \\(r = \\frac{\\sum(x-\\bar{x})(y-\\bar{y})}{\\sqrt{\\sum(x-\\bar{x})^2\\sum(y-\\bar{y})^2}}\\). Green represents positive correlation (\\(r > 0\\)), Red indicates negative (\\(r < 0\\))."}
+                {"Statistical relationships between the 7 core pillars. Green represents positive correlation (r > 0), Red indicates negative (r < 0)."}
               </p>
               
               {loadingMatrix ? (
