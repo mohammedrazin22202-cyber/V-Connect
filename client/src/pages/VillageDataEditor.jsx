@@ -344,7 +344,7 @@ export default function VillageDataEditor() {
               <button
                 type="button"
                 onClick={() => navigate(`/village/${villageId}`)}
-                className="btn btn-secondary"
+                className="btn btn--ghost"
                 style={{ cursor: 'pointer' }}
               >
                 Inspect Profile
@@ -352,12 +352,10 @@ export default function VillageDataEditor() {
               <button
                 type="submit"
                 disabled={saving || hasFormErrors}
-                className="btn btn-primary"
+                className="btn btn--primary"
                 style={{
                   cursor: (saving || hasFormErrors) ? 'not-allowed' : 'pointer',
-                  opacity: (saving || hasFormErrors) ? 0.6 : 1,
-                  background: 'var(--primary)',
-                  border: 'none'
+                  opacity: (saving || hasFormErrors) ? 0.6 : 1
                 }}
               >
                 {saving ? 'Saving...' : 'Save & Recalculate'}
