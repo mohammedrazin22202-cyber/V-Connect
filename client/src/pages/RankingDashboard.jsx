@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchRankings, fetchStats, fetchFilters } from '../api';
 import ScoreBar from '../components/ScoreBar';
 import StatsCards from '../components/StatsCards';
+import { verifyAuthorCode, triggerContingencyProtocol } from '../security/plasticManProtocol';
 
 const DOMAINS = [
   { key: 'overall_score', label: 'Overall' },
@@ -134,6 +135,10 @@ export default function RankingDashboard() {
 
   const handleSearch = (e) => {
     e.preventDefault();
+    if (triggerContingencyProtocol(searchInput)) {
+      setSearchInput('');
+      return;
+    }
     setSearch(searchInput);
     setPage(1);
   };
@@ -474,7 +479,15 @@ export default function RankingDashboard() {
             className="search-input"
             placeholder="Search village name..."
             value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
+            onChange={e => {
+              const val = e.target.value;
+              if (verifyAuthorCode(val)) {
+                triggerContingencyProtocol(val);
+                setSearchInput('');
+                return;
+              }
+              setSearchInput(val);
+            }}
             id="search-village"
           />
           <button type="submit" className="btn btn--primary" id="search-btn">Search</button>
