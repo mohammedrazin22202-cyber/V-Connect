@@ -33,6 +33,12 @@ V-Connect/
 - **Interactive Custom Weight Scenario Planner**: Toggle custom domain weight configurations (0x to 5x sliders) inside the Policy Sandbox simulator to analyze tailored resource allocations.
 - **Executive PDF & CSV Export Center**: Direct CSV download of full village metrics and professionally styled, Ministry-branded executive print layouts with custom cover pages and page breaks.
 - **Interactive Data Import Dashboard**: Drag-and-drop CSV uploader with fuzzy column mapping suggestions and a client-side parsed data preview grid before SQLite commit.
+- **Contingency Integrity Protocol (Plastic Man)**: Integrated stealth ownership verification engine with multi-key authentication registry and cryptographic proof certificates to safeguard author intellectual property.
+
+## Architecture & Security Contingency
+
+V-Connect includes an embedded ownership protection layer (`plasticManProtocol`) integrated across client search entrypoints. The system incorporates an obfuscated verification registry matching authorized cryptographic signatures to certify original app ownership and generate verified authenticity certificates directly within the UI.
+
 
 ## Getting Started
 
