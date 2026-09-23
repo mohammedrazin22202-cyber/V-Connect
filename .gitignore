@@ -34,3 +34,9 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# Environment and Temporary Artifacts
+.venv/
+venv/
+artifacts_temp/
+Village_Profiles/
