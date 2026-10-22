@@ -96,7 +96,7 @@ html, body, #root {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 32px 40px;
+  padding: 80px 40px 32px 40px;
   background: linear-gradient(135deg, var(--bg-primary) 0%, #0d1424 50%, var(--bg-primary) 100%);
 }
 
@@ -1553,6 +1553,7 @@ html, body, #root {
   .sidebar,
   .sidebar-overlay,
   .hamburger-btn,
+  .clock-slogan-widget,
   .back-btn,
   .btn,
   .selector-actions,

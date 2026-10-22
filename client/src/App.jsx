@@ -15,6 +15,7 @@ import VillageTargetPlanner from './pages/VillageTargetPlanner';
 import AnomalyHub from './pages/AnomalyHub';
 import VillageDataEditor from './pages/VillageDataEditor';
 import Sidebar from './components/Sidebar';
+import ClockSloganWidget from './components/ClockSloganWidget';
 import PlasticManModal from './components/PlasticManModal';
 import { verifyAuthorCode, triggerContingencyProtocol } from './security/plasticManProtocol';
 import './index.css';
@@ -77,6 +78,9 @@ function App() {
         />
 
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+        {/* Floating Top-Right Clock & Hourly Slogan Widget */}
+        <ClockSloganWidget />
 
         <main className="main-content">
           <Routes>
