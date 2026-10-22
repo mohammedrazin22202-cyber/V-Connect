@@ -1,0 +1,242 @@
+/* ── Clock & Slogan Floating Widget ─────────────────────────────── */
+
+.clock-slogan-widget {
+  position: fixed;
+  top: 16px;
+  right: 28px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  font-family: var(--font);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 680px;
+}
+
+.clock-slogan-widget:hover {
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 12px 36px rgba(99, 102, 241, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* ── Slogan Section ────────────────────────────────────────── */
+.csw-slogan-container {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 440px;
+  min-width: 220px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding-right: 14px;
+}
+
+.csw-slogan-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.csw-slogan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #818cf8;
+}
+
+.csw-slogan-badge-icon {
+  font-size: 11px;
+}
+
+.csw-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.csw-action-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.4;
+}
+
+.csw-action-btn:hover {
+  background: rgba(99, 102, 241, 0.2);
+  color: #c7d2fe;
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.csw-reset-btn {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.08);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.csw-reset-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+  color: #bae6fd;
+}
+
+.csw-slogan-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #e2e8f0;
+  font-style: italic;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  transition: opacity 0.3s ease;
+}
+
+.csw-slogan-fade {
+  animation: sloganFadeIn 0.4s ease-out;
+}
+
+@keyframes sloganFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Clock Section ─────────────────────────────────────────── */
+.csw-clock-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.csw-time-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.csw-live-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: livePulse 2s infinite;
+}
+
+@keyframes livePulse {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.csw-time-digits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.csw-date-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+/* ── Compact / Minimized mode ──────────────────────────────── */
+.clock-slogan-widget.is-collapsed {
+  max-width: 220px;
+  padding: 6px 12px;
+}
+
+.clock-slogan-widget.is-collapsed .csw-slogan-container {
+  display: none;
+}
+
+.csw-toggle-collapse-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: color 0.15s ease;
+}
+
+.csw-toggle-collapse-btn:hover {
+  color: var(--text-primary);
+}
+
+/* ── Responsive adjustments ────────────────────────────────── */
+@media (max-width: 992px) {
+  .clock-slogan-widget {
+    max-width: 520px;
+    right: 16px;
+    top: 12px;
+  }
+  .csw-slogan-container {
+    max-width: 300px;
+  }
+}
+
+@media (max-width: 768px) {
+  .clock-slogan-widget {
+    top: 12px;
+    right: 12px;
+    max-width: calc(100vw - 80px); /* Leave room for hamburger button on left */
+    gap: 10px;
+    padding: 6px 10px;
+  }
+  .csw-slogan-container {
+    display: none; /* Collapse slogan by default on mobile, show clock cleanly */
+  }
+  .clock-slogan-widget.mobile-expanded .csw-slogan-container {
+    display: flex;
+  }
+  .csw-time-digits {
+    font-size: 12px;
+  }
+  .csw-date-text {
+    font-size: 10px;
+  }
+}
