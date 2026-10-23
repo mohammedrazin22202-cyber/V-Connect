@@ -9,7 +9,8 @@ import './ClockSloganWidget.css';
  * - Real-time 12-hour digital clock with live seconds and date.
  * - Dynamic slogan system featuring 300+ curated rural development and empowerment slogans.
  * - Automatically rotates to the next slogan every 1 hour (on the hour).
- * - Interactive shuffle and preview controls allowing exploration of the 300+ slogans.
+ * - Interactive shuffle and bidirectional preview controls allowing exploration of the 300+ slogans.
+ * - Tab visibility listener ensuring immediate re-synchronization when resuming from sleep or background.
  * - Responsive glassmorphism badge with minimize/expand toggle.
  */
 export default function ClockSloganWidget() {
@@ -19,21 +20,37 @@ export default function ClockSloganWidget() {
   const [fadeKey, setFadeKey] = useState(0);
   const prevHourlyIndexRef = useRef(getHourlySloganIndex(new Date()));
 
-  // Live timer tick every 1000ms
+  // Live timer tick every 1000ms with background tab resync
   useEffect(() => {
-    const timer = setInterval(() => {
+    const syncTimeAndRotation = () => {
       const now = new Date();
       setCurrentTime(now);
 
       const currentHourlyIdx = getHourlySloganIndex(now);
       if (currentHourlyIdx !== prevHourlyIndexRef.current) {
         prevHourlyIndexRef.current = currentHourlyIdx;
+        // Auto-revert any custom preview on hourly boundary so the new hourly slogan displays
+        setCustomIndex(null);
         // Trigger fade animation on hourly rollover
         setFadeKey(k => k + 1);
       }
-    }, 1000);
+    };
 
-    return () => clearInterval(timer);
+    const timer = setInterval(syncTimeAndRotation, 1000);
+
+    // Re-sync immediately when returning from an inactive/throttled background tab
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        syncTimeAndRotation();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const hourlyIndex = getHourlySloganIndex(currentTime);
@@ -57,11 +74,20 @@ export default function ClockSloganWidget() {
     year: 'numeric',
   });
 
+  // Cycle to previous slogan
+  const handlePrevSlogan = () => {
+    setCustomIndex(prev => {
+      const curr = prev === null ? hourlyIndex : prev;
+      return (curr - 1 + RURAL_SLOGANS.length) % RURAL_SLOGANS.length;
+    });
+    setFadeKey(k => k + 1);
+  };
+
   // Cycle to next slogan
   const handleNextSlogan = () => {
     setCustomIndex(prev => {
-      const next = prev === null ? (hourlyIndex + 1) % RURAL_SLOGANS.length : (prev + 1) % RURAL_SLOGANS.length;
-      return next;
+      const curr = prev === null ? hourlyIndex : prev;
+      return (curr + 1) % RURAL_SLOGANS.length;
     });
     setFadeKey(k => k + 1);
   };
@@ -83,6 +109,7 @@ export default function ClockSloganWidget() {
     <aside
       className={`clock-slogan-widget ${isCollapsed ? 'is-collapsed' : ''}`}
       aria-label="Application Clock and Slogan"
+      aria-expanded={!isCollapsed}
       id="top-right-clock-slogan"
     >
       {/* Slogan Container */}
@@ -111,6 +138,14 @@ export default function ClockSloganWidget() {
               title="Shuffle another slogan from the 300+ library"
             >
               🎲
+            </button>
+            <button
+              type="button"
+              className="csw-action-btn"
+              onClick={handlePrevSlogan}
+              title="Previous slogan"
+            >
+              &lt;
             </button>
             <button
               type="button"
@@ -146,6 +181,7 @@ export default function ClockSloganWidget() {
         onClick={() => setIsCollapsed(c => !c)}
         title={isCollapsed ? 'Expand slogan & details' : 'Collapse slogan to compact clock'}
         aria-label={isCollapsed ? 'Expand slogan' : 'Collapse slogan'}
+        aria-expanded={!isCollapsed}
       >
         {isCollapsed ? '◀' : '▶'}
       </button>
