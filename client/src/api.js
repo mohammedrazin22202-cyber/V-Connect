@@ -1,5 +1,13 @@
 const API_BASE = '/api';
 
+async function handleResponse(res) {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchRankings(params = {}) {
   const query = new URLSearchParams();
   if (params.page) query.set('page', params.page);
@@ -21,34 +29,34 @@ export async function fetchRankings(params = {}) {
   if (params.w_soc) query.set('w_soc', params.w_soc);
 
   const res = await fetch(`${API_BASE}/rankings?${query}`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchVillage(id) {
   const res = await fetch(`${API_BASE}/villages/${id}`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchSimulatedRank(score) {
   const res = await fetch(`${API_BASE}/simulate-rank?score=${score}`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchStats() {
   const res = await fetch(`${API_BASE}/stats`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchFilters(state = '') {
   const query = state ? `?state=${encodeURIComponent(state)}` : '';
   const res = await fetch(`${API_BASE}/filters${query}`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchStateComparison(states = []) {
   const query = states.length ? `?states=${states.join(',')}` : '';
   const res = await fetch(`${API_BASE}/compare/states${query}`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchRegionalSimulation(params = {}) {
@@ -60,7 +68,7 @@ export async function fetchRegionalSimulation(params = {}) {
   });
 
   const res = await fetch(`${API_BASE}/simulation/region?${query}`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function updateVillageBudget(payload = {}) {
@@ -69,7 +77,7 @@ export async function updateVillageBudget(payload = {}) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function ingestCSVData(csvContent) {
@@ -78,23 +86,23 @@ export async function ingestCSVData(csvContent) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ csvContent }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchAdminStats() {
   const res = await fetch(`${API_BASE}/admin/stats`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchDistrictAggregates() {
   const res = await fetch(`${API_BASE}/stats/districts`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchCorrelationData(var1 = '', var2 = '') {
   const query = (var1 && var2) ? `?var1=${encodeURIComponent(var1)}&var2=${encodeURIComponent(var2)}` : '';
   const res = await fetch(`${API_BASE}/analytics/correlation${query}`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function triggerPipelineRun(pipeline, args = []) {
@@ -103,7 +111,7 @@ export async function triggerPipelineRun(pipeline, args = []) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pipeline, args }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export function streamPipelineLogs(onLog, onStatus) {
@@ -137,7 +145,7 @@ export function streamPipelineLogs(onLog, onStatus) {
 
 export async function fetchVillageHistory(id) {
   const res = await fetch(`${API_BASE}/villages/${id}/history`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchVillageRecommendations(id) {
@@ -145,12 +153,12 @@ export async function fetchVillageRecommendations(id) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchDataQualityReport() {
   const res = await fetch(`${API_BASE}/admin/data-quality`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchAmenitiesStatus(params = {}) {
@@ -175,7 +183,7 @@ export async function fetchAmenitiesStatus(params = {}) {
   if (params.internet_t !== undefined) query.set('internet_t', params.internet_t);
 
   const res = await fetch(`${API_BASE}/villages/amenities-status?${query}`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchDistrictRankings(params = {}) {
@@ -184,12 +192,12 @@ export async function fetchDistrictRankings(params = {}) {
   if (params.sort_by) query.set('sort_by', params.sort_by);
   if (params.order) query.set('order', params.order);
   const res = await fetch(`${API_BASE}/districts/rankings?${query}`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function fetchAnomalies() {
   const res = await fetch(`${API_BASE}/admin/anomalies`);
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function updateVillageMetrics(id, metrics) {
@@ -198,7 +206,7 @@ export async function updateVillageMetrics(id, metrics) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ metrics }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 
